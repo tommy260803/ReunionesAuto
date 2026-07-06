@@ -22,44 +22,38 @@
     },
     {
       "parameters": {
-        "modelId": {
-          "__rl": true,
-          "value": "gpt-4.1",
-          "mode": "list",
-          "cachedResultName": "GPT-4.1"
-        },
-        "messages": {
-          "values": [
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "content": "=Eres un asistente que convierte solicitudes de reuniones en JSON estricto.\n\nDevuelve SOLO JSON válido, sin texto adicional.\n\nFormato esperado:\n{\n \"asunto\": string,\n \"fecha_iso\": string (formato ISO 8601, zona America/Lima),\n \"duracion_minutos\": number,\n \"correos\": string[],\n \"nivel_minimo\": \"basico\" | \"pro\" | \"enterprise\" | null,\n \"solo_este_nivel\": true\n}\n\nReglas:\n- Si no hay fecha, asume mañana 11:00 America/Lima.\n- Si no hay duración, usa 60.\n- Si no indica correos, devuelve [].\n- Si menciona nivel tipo \"basico\", “pro”, “enterprise”, úsalo; si no hay, null.\n- Si el usuario dice palabras como \"solo\", \"únicamente\", \"exclusivamente\" junto con un nivel,\nentonces \"nivel_minimo\" es ese nivel y \"solo_este_nivel\" = true.\nSi no, \"solo_este_nivel\" = false.\n- NUNCA añadas explicaciones fuera del JSON.",
-              "role": "system"
+              "name": "Authorization",
+              "value": "=Bearer TU-GROQ-API-KEY-AQUI"
             },
             {
-              "content": "={{ $json.body.mensaje }}"
+              "name": "Content-Type",
+              "value": "application/json"
             }
           ]
         },
-        "jsonOutput": true,
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que convierte solicitudes de reuniones en JSON estricto.\\n\\nDevuelve SOLO JSON v\\u00e1lido, sin texto adicional.\\n\\nFormato esperado:\\n{\\n \\\"asunto\\\": string,\\n \\\"fecha_iso\\\": string (formato ISO 8601, zona America/Lima),\\n \\\"duracion_minutos\\\": number,\\n \\\"correos\\\": string[],\\n \\\"nivel_minimo\\\": \\\"basico\\\" | \\\"pro\\\" | \\\"enterprise\\\" | null,\\n \\\"solo_este_nivel\\\": true\\n}\\n\\nReglas:\\n- Si no hay fecha, asume ma\\u00f1ana 11:00 America/Lima.\\n- Si no hay duraci\\u00f3n, usa 60.\\n- Si no indica correos, devuelve [].\\n- Si menciona nivel tipo \\\"basico\\\", \\\"pro\\\", \\\"enterprise\\\", \\u00fasalo; si no hay, null.\\n- Si el usuario dice palabras como \\\"solo\\\", \\\"\\u00fanicamente\\\", \\\"exclusivamente\\\" junto con un nivel,\\nentonces \\\"nivel_minimo\\\" es ese nivel y \\\"solo_este_nivel\\\" = true.\\nSi no, \\\"solo_este_nivel\\\" = false.\\n- NUNCA a\\u00f1adas explicaciones fuera del JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.body.mensaje }}\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
         "options": {}
       },
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 1.8,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -384,
         -64
       ],
       "id": "1397d94c-449f-4b05-a961-1e75becc70ae",
-      "name": "Message a model",
-      "credentials": {
-        "openAiApi": {
-          "id": "UYoZ0zjjOIxF1dmr",
-          "name": "OpenAi Asistente"
-        }
-      }
+      "name": "Groq API"
     },
     {
       "parameters": {
-        "jsCode": "\nconst creador = $('Webhook').first().json.body.creador_id;\nconst parsed = $input.first().json.message.content; // the AI already returned JSON\n\nif (!creador) throw new Error(\"Falta creador_id\");\n\nreturn [{\n  json: {\n    creador_id: creador,\n    asunto: parsed.asunto,\n    fecha_iso: parsed.fecha_iso,\n    duracion_minutos: parsed.duracion_minutos,\n    correos: parsed.correos,\n    nivel_minimo: parsed.nivel_minimo\n  }\n}];"
+        "jsCode": "\nconst creador = $('Webhook').first().json.body.creador_id;\nconst groqResponse = $input.first().json;\nconst content = groqResponse.choices[0].message.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\n\nif (!creador) throw new Error(\"Falta creador_id\");\n\nreturn [{\n  json: {\n    creador_id: creador,\n    asunto: parsed.asunto,\n    fecha_iso: parsed.fecha_iso,\n    duracion_minutos: parsed.duracion_minutos,\n    correos: parsed.correos,\n    nivel_minimo: parsed.nivel_minimo\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -131,7 +125,7 @@
           "conditions": [
             {
               "id": "c6cbe059-99db-49dd-b994-7ad919f60cb0",
-              "leftValue": "={{ $('Message a model').item.json.message.content.solo_este_nivel }}",
+              "leftValue": "={{ $('Code in JavaScript').item.json.solo_este_nivel }}",
               "rightValue": "",
               "operator": {
                 "type": "boolean",
@@ -155,7 +149,7 @@
     },
     {
       "parameters": {
-        "url": "https://abdnpgxakbmcrfwrkivb.supabase.co/rest/v1/usuarios",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/usuarios",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -174,11 +168,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             }
           ]
         },
@@ -195,7 +189,7 @@
     },
     {
       "parameters": {
-        "url": "https://abdnpgxakbmcrfwrkivb.supabase.co/rest/v1/usuarios",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/usuarios",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -214,11 +208,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             }
           ]
         },
@@ -235,7 +229,7 @@
     },
     {
       "parameters": {
-        "url": "https://abdnpgxakbmcrfwrkivb.supabase.co/rest/v1/usuarios",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/usuarios",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -245,7 +239,7 @@
             },
             {
               "name": "correo",
-              "value": "=in.({{ $('Message a model').item.json.message.content.correos }})"
+              "value": "=in.({{ $('Code in JavaScript').item.json.correos }})"
             }
           ]
         },
@@ -254,11 +248,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             }
           ]
         },
@@ -324,17 +318,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://abdnpgxakbmcrfwrkivb.supabase.co/rest/v1/reuniones",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/reuniones",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Content-Type",
@@ -363,17 +357,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://abdnpgxakbmcrfwrkivb.supabase.co/rest/v1/participantes",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/participantes",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFiZG5wZ3hha2JtY3Jmd3JraXZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE3NzkzOTMsImV4cCI6MjA3NzM1NTM5M30._CXWCte1H5mOczwm6G8XEmyL_H8Qee8fQvfCqOCtnR8"
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
             },
             {
               "name": "Content-Type",
@@ -444,14 +438,14 @@
       "main": [
         [
           {
-            "node": "Message a model",
+            "node": "Groq API",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Message a model": {
+    "Groq API": {
       "main": [
         [
           {
@@ -589,7 +583,7 @@
       "main": [
         [
           {
-            "node": "Send a message",
+            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
@@ -601,17 +595,6 @@
         [
           {
             "node": "Insertar Participantes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send a message": {
-      "main": [
-        [
-          {
-            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }

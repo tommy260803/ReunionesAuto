@@ -28,7 +28,461 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-st.set_page_config(page_title="Asistente de Reuniones", page_icon="💬", layout="wide")
+st.set_page_config(
+    page_title="Asistente de Reuniones",
+    page_icon="💬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+NAV_LABELS = {
+    "Chat": "Chat asistido",
+    "Usuarios": "Usuarios",
+    "Reuniones": "Reuniones",
+    "Tareas": "Tareas",
+    "Resumen de reuniones": "Resúmenes",
+    "Participantes": "Participantes",
+    "Métricas": "Métricas",
+    "Cerrar sesión": "Cerrar sesión",
+}
+
+NAV_ICONS = {
+    "Chat": "💬",
+    "Usuarios": "👥",
+    "Reuniones": "📅",
+    "Tareas": "✅",
+    "Resumen de reuniones": "📝",
+    "Participantes": "🤝",
+    "Métricas": "📊",
+    "Cerrar sesión": "🚪",
+}
+
+def inject_custom_styles():
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0f172a 0%, #111827 45%, #172554 100%);
+    }
+
+    [data-testid="stSidebar"] > div:first-child {
+        padding-top: 1.2rem;
+    }
+
+    [data-testid="stSidebar"] * {
+        color: #e5eefb;
+    }
+
+    .sidebar-brand {
+        padding: 1rem 1rem 0.5rem 1rem;
+    }
+
+    .sidebar-brand-card {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.24), rgba(14, 165, 233, 0.16));
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 18px;
+        padding: 1rem;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+    }
+
+    .sidebar-eyebrow {
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #93c5fd;
+        margin-bottom: 0.35rem;
+        font-weight: 700;
+    }
+
+    .sidebar-title {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin: 0;
+        color: #f8fafc;
+    }
+
+    .sidebar-subtitle {
+        font-size: 0.88rem;
+        margin-top: 0.4rem;
+        color: #cbd5e1;
+        line-height: 1.45;
+    }
+
+    .sidebar-user-card {
+        background: rgba(15, 23, 42, 0.52);
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        border-radius: 16px;
+        padding: 0.9rem 1rem;
+        margin: 0.9rem 0 0.35rem 0;
+    }
+
+    .sidebar-user-name {
+        font-size: 0.98rem;
+        font-weight: 700;
+        color: #f8fafc;
+        margin-bottom: 0.15rem;
+    }
+
+    .sidebar-user-meta {
+        font-size: 0.82rem;
+        color: #cbd5e1;
+        line-height: 1.45;
+    }
+
+    .sidebar-chip {
+        display: inline-block;
+        margin-top: 0.6rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.18);
+        color: #bfdbfe;
+        font-size: 0.74rem;
+        font-weight: 700;
+    }
+
+    .sidebar-section-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #93c5fd;
+        margin: 1rem 0 0.4rem 0;
+        font-weight: 700;
+    }
+
+    [data-testid="stSidebar"] [role="radiogroup"] > label {
+        background: rgba(15, 23, 42, 0.42);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 14px;
+        padding: 0.2rem 0.35rem;
+        margin-bottom: 0.45rem;
+        transition: all 0.18s ease;
+    }
+
+    [data-testid="stSidebar"] [role="radiogroup"] > label:hover {
+        border-color: rgba(96, 165, 250, 0.7);
+        background: rgba(30, 41, 59, 0.88);
+        transform: translateX(2px);
+    }
+
+    [data-testid="stSidebar"] [role="radiogroup"] label[data-baseweb="radio"] > div:first-child {
+        display: none;
+    }
+
+    [data-testid="stSidebar"] [role="radiogroup"] p {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #e2e8f0;
+    }
+
+    [data-testid="stSidebar"] [role="radiogroup"] > label:has(input:checked) {
+        background: linear-gradient(135deg, rgba(37, 99, 235, 0.38), rgba(14, 165, 233, 0.24));
+        border-color: rgba(125, 211, 252, 0.75);
+        box-shadow: 0 8px 20px rgba(2, 132, 199, 0.2);
+    }
+
+    [data-testid="stSidebar"] .stDateInput label,
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stTextInput label {
+        color: #cbd5e1;
+        font-weight: 600;
+    }
+
+    [data-testid="stSidebar"] hr {
+        border-color: rgba(148, 163, 184, 0.14);
+        margin-top: 1rem;
+        margin-bottom: 0.85rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def render_sidebar(opciones_menu, admin):
+    session = st.session_state.session or {}
+    nombre = session.get("nombre", "Usuario")
+    nivel = str(session.get("nivel", "basico")).capitalize()
+    correo = session.get("correo", "")
+    chip = "Administrador" if admin else f"Plan {nivel}"
+
+    with st.sidebar:
+        st.markdown("""
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-card">
+                <div class="sidebar-eyebrow">Zoom2</div>
+                <p class="sidebar-title">Asistente de Reuniones</p>
+                <div class="sidebar-subtitle">Organiza reuniones, tareas, participantes y resúmenes desde un solo panel.</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(
+            f"""
+            <div class="sidebar-user-card">
+                <div class="sidebar-user-name">{nombre}</div>
+                <div class="sidebar-user-meta">{correo}</div>
+                <div class="sidebar-user-meta">Suscripción: {nivel}</div>
+                <span class="sidebar-chip">{chip}</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown('<div class="sidebar-section-title">Navegación</div>', unsafe_allow_html=True)
+        return st.radio(
+            "Navegación",
+            opciones_menu,
+            format_func=lambda page: f"{NAV_ICONS.get(page, '•')}  {NAV_LABELS.get(page, page)}",
+            label_visibility="collapsed",
+        )
+
+def render_public_sidebar():
+    with st.sidebar:
+        st.markdown("""
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-card">
+                <div class="sidebar-eyebrow">Zoom2</div>
+                <p class="sidebar-title">Asistente de Reuniones</p>
+                <div class="sidebar-subtitle">Programa reuniones, gestiona participantes y centraliza resúmenes y tareas desde un mismo lugar.</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown(
+            """
+            <div class="sidebar-user-card">
+                <div class="sidebar-user-name">Acceso al sistema</div>
+                <div class="sidebar-user-meta">Inicia sesión o crea una cuenta para habilitar el panel completo.</div>
+                <span class="sidebar-chip">Modo público</span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown('<div class="sidebar-section-title">Accesos</div>', unsafe_allow_html=True)
+        st.caption("Usa las pestañas centrales para iniciar sesión o registrarte.")
+        st.caption("Al ingresar verás el menú completo de navegación en esta barra lateral.")
+
+def render_chat_styles():
+    st.markdown("""
+    <style>
+    .chat-hero {
+        background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 55%, #f8fafc 100%);
+        border: 1px solid #dbeafe;
+        border-radius: 24px;
+        padding: 1.4rem 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 14px 40px rgba(37, 99, 235, 0.08);
+    }
+
+    .chat-eyebrow {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #2563eb;
+        margin-bottom: 0.4rem;
+    }
+
+    .chat-title {
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin-bottom: 0.35rem;
+    }
+
+    .chat-copy {
+        font-size: 0.98rem;
+        color: #475569;
+        line-height: 1.6;
+        margin-bottom: 0;
+    }
+
+    .chat-summary-card {
+        background: #ffffff;
+        border: 1px solid #dbeafe;
+        border-radius: 20px;
+        padding: 1.1rem 1rem;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+        height: 100%;
+    }
+
+    .chat-card-title {
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #2563eb;
+        font-weight: 800;
+        margin-bottom: 0.55rem;
+    }
+
+    .chat-card-text {
+        font-size: 0.94rem;
+        color: #334155;
+        line-height: 1.55;
+        margin: 0;
+    }
+
+    .chat-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin-top: 0.75rem;
+    }
+
+    .chat-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        background: #eff6ff;
+        color: #1d4ed8;
+        border: 1px solid #bfdbfe;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .chat-panel {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 22px;
+        padding: 1.1rem 1.15rem 0.9rem 1.15rem;
+        box-shadow: 0 10px 32px rgba(15, 23, 42, 0.04);
+        margin-bottom: 1rem;
+    }
+
+    .chat-panel-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 0.25rem;
+    }
+
+    .chat-panel-copy {
+        font-size: 0.92rem;
+        color: #64748b;
+        margin-bottom: 0.9rem;
+    }
+
+    .chat-empty-state {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px dashed #cbd5e1;
+        border-radius: 20px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+    }
+
+    .chat-empty-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0f172a;
+        margin-bottom: 0.35rem;
+    }
+
+    .chat-empty-copy {
+        font-size: 0.92rem;
+        color: #64748b;
+        line-height: 1.55;
+        margin-bottom: 0;
+    }
+
+    [data-testid="stChatMessage"] {
+        border-radius: 20px;
+        padding: 0.35rem 0.2rem;
+    }
+
+    [data-testid="stChatMessageContent"] {
+        border-radius: 18px;
+        padding: 0.85rem 1rem;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+    }
+
+    [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) [data-testid="stChatMessageContent"] {
+        background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+        border-color: #bfdbfe;
+    }
+
+    [data-testid="stChatInput"] {
+        border-top: 1px solid #e2e8f0;
+        background: rgba(255,255,255,0.96);
+        backdrop-filter: blur(8px);
+    }
+
+    div[data-testid="stExpander"] {
+        border: none;
+        background: transparent;
+    }
+
+    .chat-response-card {
+        background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+        border: 1px solid #bbf7d0;
+        border-radius: 18px;
+        padding: 1rem 1.1rem;
+        margin: 0.25rem 0;
+    }
+
+    .chat-response-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #166534;
+        margin-bottom: 0.6rem;
+    }
+
+    .chat-response-row {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin-bottom: 0.3rem;
+    }
+
+    .chat-response-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #64748b;
+        min-width: 82px;
+    }
+
+    .chat-response-value {
+        font-size: 0.94rem;
+        color: #0f172a;
+    }
+
+    .chat-response-link {
+        font-size: 0.94rem;
+        color: #2563eb;
+        word-break: break-all;
+    }
+
+    .chat-error-card {
+        background: linear-gradient(135deg, #fef2f2 0%, #ffffff 100%);
+        border: 1px solid #fecaca;
+        border-radius: 18px;
+        padding: 1rem 1.1rem;
+        margin: 0.25rem 0;
+    }
+
+    .chat-error-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #991b1b;
+        margin-bottom: 0.4rem;
+    }
+
+    .chat-error-detail {
+        font-size: 0.9rem;
+        color: #7f1d1d;
+        line-height: 1.5;
+    }
+
+    .chat-clear-btn {
+        margin-bottom: 0.5rem;
+    }
+
+    .chat-divider {
+        margin: 0.75rem 0 0.25rem 0;
+        border: none;
+        border-top: 1px solid #e2e8f0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 def registrar_metrica_n8n(endpoint, tiempo_respuesta, estado, codigo_estado=None, reunion_id=None, tamano_respuesta=None, detalles=None):
     """
@@ -433,8 +887,7 @@ def view_register():
 
 # -------- Chat Reuniones --------
 def view_chat():
-    st.title("💬 Crear reunión por chat")
-    st.caption("Escribe algo como: *“Programa una reunión mañana 11 am por 45 min con asunto Ventas Q4 e invita a enterprise y a ana@empresa.com”*")
+    render_chat_styles()
 
     # Reset seguro de opciones antes de instanciar widgets
     if st.session_state.get("chat_reset_pending"):
@@ -443,20 +896,101 @@ def view_chat():
         st.session_state["tipo_reunion"] = "Virtual"
         st.session_state["chat_reset_pending"] = False
 
+    tipo_actual = st.session_state.get("tipo_reunion", "Virtual")
+    invitados_actuales = st.session_state.get("quick_email", "").strip()
+    direccion_actual = st.session_state.get("direccion_reunion", "").strip()
+    resumen_invitados = invitados_actuales if invitados_actuales else "Sin invitados precargados"
+    resumen_direccion = direccion_actual if direccion_actual else "Se definirá desde el mensaje o quedará vacía"
+
+    hero_col, summary_col = st.columns([2.2, 1.1], gap="large")
+    with hero_col:
+        st.markdown("""
+        <div class="chat-hero">
+            <div class="chat-eyebrow">Asistente conversacional</div>
+            <div class="chat-title">💬 Chat asistido</div>
+            <p class="chat-copy">Describe la reunión en lenguaje natural y el sistema completará el contexto con el tipo, invitados y dirección que definas aquí.</p>
+            <div class="chat-chip-row">
+                <span class="chat-chip">Lenguaje natural</span>
+                <span class="chat-chip">Integración con n8n</span>
+                <span class="chat-chip">Agenda guiada</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with summary_col:
+        st.markdown(
+            f"""
+            <div class="chat-summary-card">
+                <div class="chat-card-title">Resumen actual</div>
+                <p class="chat-card-text"><strong>Tipo:</strong> {tipo_actual}</p>
+                <p class="chat-card-text"><strong>Invitados:</strong> {resumen_invitados}</p>
+                <p class="chat-card-text"><strong>Dirección:</strong> {resumen_direccion}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    if st.session_state.chat:
+        col_chat_top, col_chat_clear = st.columns([5, 1])
+        with col_chat_clear:
+            if st.button("🔄 Nuevo chat", use_container_width=True, type="secondary"):
+                st.session_state.chat = []
+                st.rerun()
+    else:
+        st.markdown("""
+        <div class="chat-empty-state">
+            <div class="chat-empty-title">Comienza con una instrucción simple</div>
+            <p class="chat-empty-copy">Ejemplo: “Programa una reunión mañana a las 11 am por 45 minutos con el equipo comercial y agrega a ana@empresa.com”.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
     # Mostrar historial
     for role, text in st.session_state.chat:
         with st.chat_message(role):
-            st.markdown(text)
+            st.markdown(text, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="chat-panel">
+        <div class="chat-panel-title">Opciones rápidas de la reunión</div>
+        <div class="chat-panel-copy">Estas opciones se agregan automáticamente a tu mensaje para que el chat tenga más contexto antes de enviarlo a n8n.</div>
+    """, unsafe_allow_html=True)
 
     # Opciones de reunión (en un expander, sobre el input fijo)
-    with st.expander("Opciones de reunión", expanded=True):
+    with st.expander("Configurar reunión", expanded=True):
         col_tipo, col_inv = st.columns([2,3])
         with col_tipo:
             st.radio("Tipo de reunión", ["Virtual","Presencial","Mixta"], horizontal=True, key="tipo_reunion")
         with col_inv:
-            st.text_input("Invitados (emails separados por coma)", placeholder="ana@empresa.com, juan@empresa.com", key="quick_email")
+            st.text_area(
+                "Invitados",
+                placeholder="ana@empresa.com\njuan@empresa.com",
+                key="quick_email",
+                height=80,
+                help="Un email por línea o separados por coma",
+            )
+            raw_emails = st.session_state.get("quick_email", "").strip()
+            if raw_emails:
+                parsed = [e.strip() for e in re.split(r"[,\n]+", raw_emails) if e.strip()]
+                if parsed:
+                    chip_html = '<div style="display:flex;flex-wrap:wrap;gap:0.35rem;margin-top:0.1rem;">'
+                    valido = 0
+                    for e in parsed:
+                        es_valido = bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", e))
+                        if es_valido:
+                            valido += 1
+                        bg = "#dcfce7" if es_valido else "#fef2f2"
+                        bd = "#86efac" if es_valido else "#fecaca"
+                        co = "#166534" if es_valido else "#991b1b"
+                        chip_html += f'<span style="display:inline-flex;align-items:center;padding:0.15rem 0.55rem;border-radius:999px;background:{bg};color:{co};border:1px solid {bd};font-size:0.75rem;font-weight:600;">{e}</span>'
+                    chip_html += "</div>"
+                    st.markdown(chip_html, unsafe_allow_html=True)
+                    total = len(parsed)
+                    if valido == total:
+                        st.caption(f"✅ {total} invitado(s) válido(s)")
+                    else:
+                        st.caption(f"⚠️ {valido} válido(s), {total - valido} inválido(s)")
         if st.session_state.get("tipo_reunion") in ["Presencial", "Mixta"]:
             st.text_input("Dirección del lugar (si aplica)", placeholder="Av. Ejemplo 123, Sala A", key="direccion_reunion")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # Entrada fija estilo chat (WhatsApp-like)
     prompt = st.chat_input("Escribe tu solicitud…")
@@ -485,9 +1019,15 @@ def view_chat():
 
         # Llamar a n8n
         if not N8N_URL:
+            err_html = """
+            <div class="chat-error-card">
+                <div class="chat-error-title">⚠️ n8n no configurado</div>
+                <div class="chat-error-detail">Define <strong>N8N_CREATE_MEETING_WEBHOOK_URL</strong> en el archivo <code>.env</code> para habilitar la creación de reuniones vía chat.</div>
+            </div>
+            """
             with st.chat_message("assistant"):
-                st.error("Configura N8N_CREATE_MEETING_WEBHOOK_URL en .env")
-            # Señalar limpieza segura antes de recrear widgets
+                st.markdown(err_html, unsafe_allow_html=True)
+            st.session_state.chat.append(("assistant", err_html))
             st.session_state["chat_reset_pending"] = True
             st.rerun()
             return
@@ -495,124 +1035,138 @@ def view_chat():
         # Iniciar medición de tiempo
         inicio = time.time()
         payload = {"creador_id": st.session_state.session["id"], "mensaje": final_prompt}
-        try:
-            resp = requests.post(N8N_URL, json=payload, timeout=90)
-            tiempo_respuesta = time.time() - inicio
-            # Registrar métrica de la petición
-            registrar_metrica_n8n(
-                endpoint="crear_reunion_chat",
-                tiempo_respuesta=tiempo_respuesta,
-                estado="éxito" if resp.status_code == 200 else "error",
-                codigo_estado=resp.status_code,
-                detalles=f"Tiempo de respuesta: {tiempo_respuesta:.2f}s"
-            )
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                # Construir resumen según tipo/datos
-                resumen_lines = [
-                    f"✅ Reunión creada: **{data.get('meeting', {}).get('tema','')}**",
-                    f"- Fecha/hora: {data.get('meeting', {}).get('fecha','')}",
-                ]
-                # Añadir tipo/dirección si vienen en la respuesta
-                tipo_resp = data.get('meeting', {}).get('tipo') or data.get('tipo')
-                dir_resp = data.get('meeting', {}).get('direccion') or data.get('direccion')
-                # Mostrar enlace solo si tipo existe y NO es presencial
-                join_url = data.get('meeting', {}).get('join_url','')
-                if (tipo_resp is not None) and (str(tipo_resp).strip().lower() != "presencial"):
-                    if join_url:
-                        resumen_lines.append(f"- Enlace: {join_url}")
-                # Normalizar invitados a texto (preferir meeting.destinatarios)
-                participantes_emails = []
-                tema_val = data.get('meeting', {}).get('tema')
-                if tema_val:
-                    try:
-                        # Buscar la reunión más reciente con ese tema
-                        rlist = sb_select(
-                            "reuniones",
-                            {
-                                "select": "id,tema,fecha_inicio",
-                                "tema": f"eq.{tema_val}",
-                                "order": "fecha_inicio.desc",
-                                "limit": "1",
-                            },
-                        )
-                        if rlist:
-                            rid = rlist[0]["id"]
-                            parts = sb_select(
-                                "participantes",
-                                {"select": "correo", "reunion_id": f"eq.{rid}"},
+
+        def esc_html(text):
+            import html
+            return html.escape(str(text))
+
+        with st.spinner("Procesando solicitud con n8n…"):
+            try:
+                resp = requests.post(N8N_URL, json=payload, timeout=90)
+                tiempo_respuesta = time.time() - inicio
+                # Registrar métrica de la petición
+                registrar_metrica_n8n(
+                    endpoint="crear_reunion_chat",
+                    tiempo_respuesta=tiempo_respuesta,
+                    estado="éxito" if resp.status_code == 200 else "error",
+                    codigo_estado=resp.status_code,
+                    detalles=f"Tiempo de respuesta: {tiempo_respuesta:.2f}s"
+                )
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    tema = esc_html(data.get('meeting', {}).get('tema', ''))
+                    fecha = esc_html(data.get('meeting', {}).get('fecha', ''))
+                    tipo_resp = data.get('meeting', {}).get('tipo') or data.get('tipo')
+                    dir_resp = data.get('meeting', {}).get('direccion') or data.get('direccion')
+                    join_url = data.get('meeting', {}).get('join_url', '')
+
+                    # Normalizar invitados a texto (preferir meeting.destinatarios)
+                    participantes_emails = []
+                    tema_val = data.get('meeting', {}).get('tema')
+                    if tema_val:
+                        try:
+                            rlist = sb_select(
+                                "reuniones",
+                                {
+                                    "select": "id,tema,fecha_inicio",
+                                    "tema": f"eq.{tema_val}",
+                                    "order": "fecha_inicio.desc",
+                                    "limit": "1",
+                                },
                             )
-                            participantes_emails = [
-                                p.get("correo") for p in parts if p.get("correo")
-                            ]
-                    except Exception:
-                        participantes_emails = []
+                            if rlist:
+                                rid = rlist[0]["id"]
+                                parts = sb_select(
+                                    "participantes",
+                                    {"select": "correo", "reunion_id": f"eq.{rid}"},
+                                )
+                                participantes_emails = [
+                                    p.get("correo") for p in parts if p.get("correo")
+                                ]
+                        except Exception:
+                            participantes_emails = []
 
-                # Fallback a destinatarios de la carga si no hay participantes
-                if not participantes_emails:
-                    raw_dest = data.get('meeting', {}).get('destinatarios')
-                    if raw_dest is None:
-                        raw_dest = data.get('destinatarios', [])
-                    tmp = []
-                    for d in raw_dest:
-                        if isinstance(d, dict):
-                            val = d.get("email") or d.get("correo") or d.get("name") or d.get("nombre") or d.get("value")
-                            if val:
-                                tmp.append(str(val))
-                        else:
-                            tmp.append(str(d))
-                    participantes_emails = tmp
+                    if not participantes_emails:
+                        raw_dest = data.get('meeting', {}).get('destinatarios')
+                        if raw_dest is None:
+                            raw_dest = data.get('destinatarios', [])
+                        tmp = []
+                        for d in raw_dest:
+                            if isinstance(d, dict):
+                                val = d.get("email") or d.get("correo") or d.get("name") or d.get("nombre") or d.get("value")
+                                if val:
+                                    tmp.append(str(val))
+                            else:
+                                tmp.append(str(d))
+                        participantes_emails = tmp
 
-                if participantes_emails:
-                    resumen_lines.append(f"- Invitados: {', '.join(participantes_emails)}")
-                # Para reuniones presenciales: solo nombre, fecha e invitados (sin enlace, tipo ni dirección)
-                es_presencial = bool(tipo_resp) and str(tipo_resp).strip().lower() == "presencial"
-                if not es_presencial:
-                    if tipo_resp:
-                        resumen_lines.append(f"- Tipo: {tipo_resp}")
-                    if dir_resp:
-                        resumen_lines.append(f"- Dirección: {dir_resp}")
-                resumen = "\n".join(resumen_lines)
-                st.session_state.chat.append(("assistant", resumen))
-                with st.chat_message("assistant"):
-                    st.markdown(resumen)
-                # Señalar limpieza segura antes de recrear widgets
-                st.session_state["chat_reset_pending"] = True
-                st.rerun()
-            else:
-                err = f"Error n8n: {resp.status_code} - {resp.text}"
-                # Registrar error en métricas
+                    invitados_html = esc_html(', '.join(participantes_emails)) if participantes_emails else ""
+                    es_presencial = bool(tipo_resp) and str(tipo_resp).strip().lower() == "presencial"
+
+                    rows_html = ""
+                    rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Tema</span><span class="chat-response-value">{tema}</span></div>'
+                    rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Fecha</span><span class="chat-response-value">{fecha}</span></div>'
+                    if not es_presencial and join_url:
+                        rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Enlace</span><span class="chat-response-link"><a href="{esc_html(join_url)}" target="_blank">{esc_html(join_url)}</a></span></div>'
+                    if invitados_html:
+                        rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Invitados</span><span class="chat-response-value">{invitados_html}</span></div>'
+                    if not es_presencial:
+                        if tipo_resp:
+                            rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Tipo</span><span class="chat-response-value">{esc_html(tipo_resp)}</span></div>'
+                        if dir_resp:
+                            rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Dirección</span><span class="chat-response-value">{esc_html(dir_resp)}</span></div>'
+
+                    resumen_html = f"""
+                    <div class="chat-response-card">
+                        <div class="chat-response-title">✅ Reunión creada</div>
+                        {rows_html}
+                    </div>
+                    """
+                    st.session_state.chat.append(("assistant", resumen_html))
+                    with st.chat_message("assistant"):
+                        st.markdown(resumen_html, unsafe_allow_html=True)
+                    st.session_state["chat_reset_pending"] = True
+                    st.rerun()
+                else:
+                    err_detail = esc_html(f"{resp.status_code} - {resp.text[:300]}")
+                    registrar_metrica_n8n(
+                        endpoint="crear_reunion_chat",
+                        tiempo_respuesta=tiempo_respuesta,
+                        estado="error",
+                        codigo_estado=resp.status_code,
+                        detalles=f"Error en la respuesta: {resp.text[:200]}"
+                    )
+                    err_html = f"""
+                    <div class="chat-error-card">
+                        <div class="chat-error-title">❌ Error al crear reunión</div>
+                        <div class="chat-error-detail">{err_detail}</div>
+                    </div>
+                    """
+                    st.session_state.chat.append(("assistant", err_html))
+                    with st.chat_message("assistant"):
+                        st.markdown(err_html, unsafe_allow_html=True)
+                    st.session_state["chat_reset_pending"] = True
+                    st.rerun()
+            except Exception as e:
+                tiempo_respuesta = time.time() - inicio if 'inicio' in locals() else 0
                 registrar_metrica_n8n(
                     endpoint="crear_reunion_chat",
                     tiempo_respuesta=tiempo_respuesta,
                     estado="error",
-                    codigo_estado=resp.status_code,
-                    detalles=f"Error en la respuesta: {resp.text[:200]}"
+                    detalles=f"Excepción: {str(e)}"
                 )
-                
-                st.session_state.chat.append(("assistant", err))
+                err_html = f"""
+                <div class="chat-error-card">
+                    <div class="chat-error-title">❌ Error de conexión</div>
+                    <div class="chat-error-detail">{esc_html(str(e))}</div>
+                </div>
+                """
+                st.session_state.chat.append(("assistant", err_html))
                 with st.chat_message("assistant"):
-                    st.error(err)
-                # Señalar limpieza segura antes de recrear widgets
+                    st.markdown(err_html, unsafe_allow_html=True)
                 st.session_state["chat_reset_pending"] = True
                 st.rerun()
-        except Exception as e:
-            # Registrar error en métricas
-            tiempo_respuesta = time.time() - inicio if 'inicio' in locals() else 0
-            registrar_metrica_n8n(
-                endpoint="crear_reunion_chat",
-                tiempo_respuesta=tiempo_respuesta,
-                estado="error",
-                detalles=f"Excepción: {str(e)}"
-            )
-            
-            st.session_state.chat.append(("assistant", f"Error de conexión: {e}"))
-            with st.chat_message("assistant"):
-                st.error(f"Error de conexión: {e}")
-            # Señalar limpieza segura antes de recrear widgets
-            st.session_state["chat_reset_pending"] = True
-            st.rerun()
 
 
 # -------- Usuarios --------
@@ -2229,18 +2783,18 @@ def view_metricas():
         st.exception(e)
 
 # -------- Router --------
+inject_custom_styles()
 if st.session_state.session is None:
+    render_public_sidebar()
     t1, t2 = st.tabs(["Iniciar sesión", "Registrarse"])
     with t1: view_login()
     with t2: view_register()
 else:
     admin = is_admin()
-    badge = " — Admin" if admin else ""
-    st.sidebar.success(f"{st.session_state.session['nombre']} ({st.session_state.session['nivel']}){badge}")
     opciones_menu = ["Chat", "Reuniones", "Tareas", "Resumen de reuniones", "Participantes", "Métricas", "Cerrar sesión"]
     if admin:
         opciones_menu.insert(1, "Usuarios")
-    page = st.sidebar.radio("Navegación", opciones_menu)
+    page = render_sidebar(opciones_menu, admin)
     if page == "Chat":
         view_chat()
     elif page == "Usuarios":

@@ -1,0 +1,251 @@
+{
+  "name": "Resumen Virtual",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resumen-virtual",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-720, -240],
+      "id": "w1",
+      "name": "Webhook",
+      "webhookId": "resumen-virtual"
+    },
+    {
+      "parameters": {
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/reuniones",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,tema,fecha_inicio,duracion_minutos,estado,tipo"
+            },
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.body.reunion_id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-480, -320],
+      "id": "w2",
+      "name": "Obtener reunión"
+    },
+    {
+      "parameters": {
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/participantes",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "correo,rol,estado_invitacion"
+            },
+            {
+              "name": "reunion_id",
+              "value": "=eq.{{ $json.body.reunion_id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-480, -80],
+      "id": "w3",
+      "name": "Obtener participantes"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [-240, -160],
+      "id": "w4",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const reunion = $('Obtener reuni\u00f3n').first().json;\nconst participantes = $('Obtener participantes').all().map(i => i.json);\n\nconst fecha = reunion.fecha_inicio ? new Date(reunion.fecha_inicio).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'No especificada';\nconst correos = participantes.filter(p => p.correo).map(p => p.correo).join(', ');\n\nconst contexto = `Reuni\u00f3n: ${reunion.tema || 'Sin tema'}\nFecha: ${fecha}\nDuraci\u00f3n: ${reunion.duracion_minutos || 'No especificada'} minutos\nEstado: ${reunion.estado || 'No especificado'}\nTipo: ${reunion.tipo || 'No especificado'}\nParticipantes: ${correos || 'No hay participantes registrados'}`;\n\nreturn [{ json: { contexto: contexto } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, -160],
+      "id": "w5",
+      "name": "Preparar contexto"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer TU-GROQ-API-KEY-AQUI"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que genera res\\u00famenes profesionales de reuniones en espa\\u00f1ol.\\n\\nGenera un resumen estructurado con:\\n1. Datos de la reuni\\u00f3n (tema, fecha, duraci\\u00f3n, tipo)\\n2. Participantes\\n3. Resumen ejecutivo (basado en el contexto proporcionado)\\n4. Pr\\u00f3ximos pasos sugeridos\\n\\nDevuelve SOLO JSON v\\u00e1lido sin texto adicional:\\n{\\n  \\\"resumen\\\": \\\"texto completo del resumen\\\",\\n  \\\"puntos_clave\\\": [\\\"punto 1\\\", \\\"punto 2\\\"],\\n  \\\"proximos_pasos\\\": [\\\"paso 1\\\", \\\"paso 2\\\"]\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.contexto }}\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [256, -160],
+      "id": "w6",
+      "name": "Groq API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const groqResponse = $input.first().json;\nconst content = groqResponse.choices[0].message.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\n\nconst resumenTexto = parsed.resumen || JSON.stringify(parsed);\n\nreturn [{ json: { resumen: resumenTexto } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [512, -160],
+      "id": "w7",
+      "name": "Extraer resumen"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [752, -160],
+      "id": "w8",
+      "name": "Responder"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Obtener reunión",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Obtener participantes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener reunión": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener participantes": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Preparar contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar contexto": {
+      "main": [
+        [
+          {
+            "node": "Generar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar resumen": {
+      "main": [
+        [
+          {
+            "node": "Extraer resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer resumen": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

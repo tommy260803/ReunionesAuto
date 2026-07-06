@@ -1,0 +1,275 @@
+{
+  "name": "Resumen Presencial",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resumen-presencial",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryData": true,
+          "binaryPropertyName": "data"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-880, -320],
+      "id": "p1",
+      "name": "Webhook",
+      "webhookId": "resumen-presencial"
+    },
+    {
+      "parameters": {
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/reuniones",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "id,tema,fecha_inicio,duracion_minutos,estado,tipo"
+            },
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.body.reunion_id }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-640, -400],
+      "id": "p2",
+      "name": "Obtener reunión"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [-640, -160],
+      "id": "p3",
+      "name": "Extraer texto del PDF"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [-400, -240],
+      "id": "p4",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const reunion = $('Obtener reuni\u00f3n').first().json;\nconst pdfData = $('Extraer texto del PDF').first().json;\n\nconst fecha = reunion.fecha_inicio ? new Date(reunion.fecha_inicio).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'No especificada';\nconst pdfText = (pdfData.text || pdfData.extractedText || pdfData.content || '').substring(0, 15000);\n\nconst contexto = `Reuni\u00f3n: ${reunion.tema || 'Sin tema'}\nFecha: ${fecha}\nDuraci\u00f3n: ${reunion.duracion_minutos || 'No especificada'} minutos\nTipo: ${reunion.tipo || 'No especificado'}\n\nContenido del acta PDF:\n${pdfText || '(No se pudo extraer texto del PDF)'}`;\n\nconst reunionId = $('Webhook').first().json.body.reunion_id;\n\nreturn [{ json: { contexto: contexto, reunion_id: reunionId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-160, -240],
+      "id": "p5",
+      "name": "Preparar contexto"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer TU-GROQ-API-KEY-AQUI"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que genera res\\u00famenes profesionales de reuniones presenciales en espa\\u00f1ol a partir del acta escaneada.\\n\\nGenera un resumen estructurado con:\\n1. Datos de la reuni\\u00f3n (tema, fecha, duraci\\u00f3n, tipo)\\n2. Temas tratados (basados en el acta)\\n3. Acuerdos y conclusiones\\n4. Tareas y responsables\\n5. Pr\\u00f3ximos pasos\\n\\nDevuelve SOLO JSON v\\u00e1lido sin texto adicional:\\n{\\n  \\\"resumen\\\": \\\"texto completo del resumen\\\",\\n  \\\"temas_tratados\\\": [\\\"tema 1\\\", \\\"tema 2\\\"],\\n  \\\"acuerdos\\\": [\\\"acuerdo 1\\\", \\\"acuerdo 2\\\"],\\n  \\\"tareas\\\": [\\\"tarea 1\\\", \\\"tarea 2\\\"]\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.contexto }}\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [96, -240],
+      "id": "p6",
+      "name": "Groq API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const groqResponse = $input.first().json;\nconst content = groqResponse.choices[0].message.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\n\nconst resumenTexto = parsed.resumen || JSON.stringify(parsed);\nconst reunionId = $('Preparar contexto').first().json.reunion_id;\n\nreturn [{ json: { resumen: resumenTexto, reunion_id: reunionId } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [336, -240],
+      "id": "p7",
+      "name": "Extraer resumen"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/resumenes?on_conflict=reunion_id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation, resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"reunion_id\": \"{{ $json.reunion_id }}\",\n  \"resumen\": \"{{ $json.resumen }}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [576, -240],
+      "id": "p8",
+      "name": "Guardar resumen en Supabase"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"reunion_id\": \"{{ $json.reunion_id }}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [816, -240],
+      "id": "p9",
+      "name": "Responder"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Obtener reunión",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extraer texto del PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener reunión": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer texto del PDF": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Preparar contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar contexto": {
+      "main": [
+        [
+          {
+            "node": "Generar resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar resumen": {
+      "main": [
+        [
+          {
+            "node": "Extraer resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer resumen": {
+      "main": [
+        [
+          {
+            "node": "Guardar resumen en Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar resumen en Supabase": {
+      "main": [
+        [
+          {
+            "node": "Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
