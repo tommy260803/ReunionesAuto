@@ -1,0 +1,12 @@
+-- ========== METRICAS N8N ==========
+CREATE TABLE IF NOT EXISTS metricas_n8n (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  endpoint VARCHAR(100) NOT NULL,
+  tiempo_respuesta NUMERIC NOT NULL,
+  estado VARCHAR(20) NOT NULL,
+  fecha TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  codigo_estado INTEGER,
+  reunion_id UUID,
+  tamano_respuesta INTEGER,
+  detalles TEXT
+);

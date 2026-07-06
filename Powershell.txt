@@ -1,0 +1,10 @@
+python -m venv .venv       
+.\.venv\Scripts\Activate                  
+pip install -r requirements.txt
+pip install --upgrade pip
+
+SI SALE ERROR AL EJECUTAR      
+pip uninstall bcrypt -y    
+pip install passlib[bcrypt]    
+pip install "bcrypt==4.0.1" 
+pip install pandas

@@ -1,0 +1,5 @@
+ALTER TABLE usuarios ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY full_access ON usuarios
+FOR ALL
+USING ( true );
