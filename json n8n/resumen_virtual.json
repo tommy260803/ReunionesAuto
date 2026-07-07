@@ -99,7 +99,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const reunion = $('Obtener reuni\u00f3n').first().json;\nconst participantes = $('Obtener participantes').all().map(i => i.json);\n\nconst fecha = reunion.fecha_inicio ? new Date(reunion.fecha_inicio).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'No especificada';\nconst correos = participantes.filter(p => p.correo).map(p => p.correo).join(', ');\n\nconst contexto = `Reuni\u00f3n: ${reunion.tema || 'Sin tema'}\nFecha: ${fecha}\nDuraci\u00f3n: ${reunion.duracion_minutos || 'No especificada'} minutos\nEstado: ${reunion.estado || 'No especificado'}\nTipo: ${reunion.tipo || 'No especificado'}\nParticipantes: ${correos || 'No hay participantes registrados'}`;\n\nreturn [{ json: { contexto: contexto } }];"
+        "jsCode": "const reunion = $('Obtener reunión').first().json;\nconst participantes = $('Obtener participantes').all().map(i => i.json);\n\nconst fecha = reunion.fecha_inicio ? new Date(reunion.fecha_inicio).toLocaleString('es-PE', { timeZone: 'America/Lima' }) : 'No especificada';\nconst correos = participantes.filter(p => p.correo).map(p => p.correo).join(', ');\n\nconst contexto = `Reuni\\u00f3n: ${reunion.tema || 'Sin tema'}\\nFecha: ${fecha}\\nDuraci\\u00f3n: ${reunion.duracion_minutos || 'No especificada'} minutos\\nEstado: ${reunion.estado || 'No especificado'}\\nTipo: ${reunion.tipo || 'No especificado'}\\nParticipantes: ${correos || 'No hay participantes registrados'}`;\n\nreturn [{ json: { contexto: contexto } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -114,10 +114,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer TU-GROQ-API-KEY-AQUI"
-            },
+              {
+                "name": "Authorization",
+                "value": "=Bearer TU_GROQ_API_KEY_AQUI"
+              },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -126,7 +126,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que genera res\\u00famenes profesionales de reuniones en espa\\u00f1ol.\\n\\nGenera un resumen estructurado con:\\n1. Datos de la reuni\\u00f3n (tema, fecha, duraci\\u00f3n, tipo)\\n2. Participantes\\n3. Resumen ejecutivo (basado en el contexto proporcionado)\\n4. Pr\\u00f3ximos pasos sugeridos\\n\\nDevuelve SOLO JSON v\\u00e1lido sin texto adicional:\\n{\\n  \\\"resumen\\\": \\\"texto completo del resumen\\\",\\n  \\\"puntos_clave\\\": [\\\"punto 1\\\", \\\"punto 2\\\"],\\n  \\\"proximos_pasos\\\": [\\\"paso 1\\\", \\\"paso 2\\\"]\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.contexto }}\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que genera res\\u00famenes profesionales de reuniones en espa\\u00f1ol.\\n\\nGenera un resumen estructurado con:\\n1. Datos de la reuni\\u00f3n (tema, fecha, duraci\\u00f3n, tipo)\\n2. Participantes\\n3. Resumen ejecutivo (basado en el contexto proporcionado)\\n4. Pr\\u00f3ximos pasos sugeridos\\n\\nDevuelve SOLO JSON v\\u00e1lido sin texto adicional:\\n{\\n  \\\"resumen\\\": \\\"texto completo del resumen\\\",\\n  \\\"puntos_clave\\\": [\\\"punto 1\\\", \\\"punto 2\\\"],\\n  \\\"proximos_pasos\\\": [\\\"paso 1\\\", \\\"paso 2\\\"]\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.contexto) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -148,7 +148,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ $json }}",
+        "responseBody": "={\n  \"resumen\": \"{{ $json.resumen }}\"\n}\n",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
@@ -213,14 +213,14 @@
       "main": [
         [
           {
-            "node": "Generar resumen",
+            "node": "Groq API",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Generar resumen": {
+    "Groq API": {
       "main": [
         [
           {
@@ -243,7 +243,7 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1"
   },

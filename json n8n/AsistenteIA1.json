@@ -27,10 +27,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer TU-GROQ-API-KEY-AQUI"
-            },
+              {
+                "name": "Authorization",
+                "value": "=Bearer TU_GROQ_API_KEY_AQUI"
+              },
             {
               "name": "Content-Type",
               "value": "application/json"
@@ -39,7 +39,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que convierte solicitudes de reuniones en JSON estricto.\\n\\nDevuelve SOLO JSON v\\u00e1lido, sin texto adicional.\\n\\nFormato esperado:\\n{\\n \\\"asunto\\\": string,\\n \\\"fecha_iso\\\": string (formato ISO 8601, zona America/Lima),\\n \\\"duracion_minutos\\\": number,\\n \\\"correos\\\": string[],\\n \\\"nivel_minimo\\\": \\\"basico\\\" | \\\"pro\\\" | \\\"enterprise\\\" | null,\\n \\\"solo_este_nivel\\\": true\\n}\\n\\nReglas:\\n- Si no hay fecha, asume ma\\u00f1ana 11:00 America/Lima.\\n- Si no hay duraci\\u00f3n, usa 60.\\n- Si no indica correos, devuelve [].\\n- Si menciona nivel tipo \\\"basico\\\", \\\"pro\\\", \\\"enterprise\\\", \\u00fasalo; si no hay, null.\\n- Si el usuario dice palabras como \\\"solo\\\", \\\"\\u00fanicamente\\\", \\\"exclusivamente\\\" junto con un nivel,\\nentonces \\\"nivel_minimo\\\" es ese nivel y \\\"solo_este_nivel\\\" = true.\\nSi no, \\\"solo_este_nivel\\\" = false.\\n- NUNCA a\\u00f1adas explicaciones fuera del JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ $json.body.mensaje }}\"\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que convierte solicitudes de reuniones en JSON estricto.\\n\\nHOY es {{ $now.format('yyyy-MM-dd') }} ({{ $now.format('EEEE') }}).\\nLa hora actual en America/Lima es {{ $now.setZone('America/Lima').format('HH:mm') }}.\\n\\nDevuelve SOLO JSON v\\u00e1lido, sin texto adicional.\\n\\nFormato esperado:\\n{\\n \\\"asunto\\\": string,\\n \\\"fecha_iso\\\": string (ISO 8601 en America/Lima),\\n \\\"duracion_minutos\\\": number,\\n \\\"correos\\\": string[],\\n \\\"nivel_minimo\\\": \\\"basico\\\" | \\\"pro\\\" | \\\"enterprise\\\" | null,\\n \\\"solo_este_nivel\\\": boolean\\n}\\n\\nREGLAS ESTRICTAS (son ORDENES, no sugerencias):\\n1. La hora la debes calcular DIRECTAMENTE en America/Lima. NO conviertas desde UTC.\\n2. Ejemplo: 4 pm en Lima es 16:00. El ISO ser\\u00eda \\\"HOY T16:00:00-05:00\\\".\\n3. 9 am en Lima es 09:00. El ISO ser\\u00eda \\\"HOY T09:00:00-05:00\\\".\\n4. USA la fecha HOY que te indique arriba.\\n5. Si el usuario dice \\\"ma\\u00f1ana\\\", suma 1 d\\u00eda a HOY.\\n6. Si dice \\\"el lunes\\\" etc., calcula la pr\\u00f3xima ocurrencia desde HOY.\\n7. Si no hay hora, asume 11:00.\\n8. Si no hay duraci\\u00f3n, usa 60.\\n9. Si no indica correos, devuelve [].\\n10. El offset SIEMPRE es -05:00.\\n11. NUNCA a\\u00f1adas explicaciones fuera del JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.body.mensaje) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -53,7 +53,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst creador = $('Webhook').first().json.body.creador_id;\nconst groqResponse = $input.first().json;\nconst content = groqResponse.choices[0].message.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\n\nif (!creador) throw new Error(\"Falta creador_id\");\n\nreturn [{\n  json: {\n    creador_id: creador,\n    asunto: parsed.asunto,\n    fecha_iso: parsed.fecha_iso,\n    duracion_minutos: parsed.duracion_minutos,\n    correos: parsed.correos,\n    nivel_minimo: parsed.nivel_minimo\n  }\n}];"
+        "jsCode": "\nconst creador = $('Webhook').first().json.body.creador_id;\nconst groqResponse = $input.first().json;\nconst content = groqResponse.choices[0].message.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\n\nif (!creador) throw new Error(\"Falta creador_id\");\n\nreturn [{\n  json: {\n    creador_id: creador,\n    asunto: parsed.asunto,\n    fecha_iso: parsed.fecha_iso,\n    duracion_minutos: parsed.duracion_minutos,\n    correos: parsed.correos,\n    nivel_minimo: parsed.nivel_minimo,\n    solo_este_nivel: parsed.solo_este_nivel === true\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -67,7 +67,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"meeting\": {\n    \"tema\": \"{{ $('Insertar reunión en Supabase').item.json.tema }}\",\n    \"fecha\": \"{{ $('Insertar reunión en Supabase').item.json.fecha_inicio }}\",\n    \"join_url\": \"{{ $('Create a meeting').item.json.join_url }}\"\n  },\n  \"destinatarios\": \"{{ $('Code in JavaScript1').item.json.invitados_finales }}\"\n}\n",
+        "responseBody": "={\n  \"meeting\": {\n    \"tema\": \"{{ $('Insertar reunión en Supabase').item.json.tema }}\",\n    \"fecha\": \"{{ $('Insertar reunión en Supabase').item.json.fecha_inicio ? $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(8,10) + '/' + $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(5,7) + '/' + $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(0,4) : '' }}\",\n    \"hora\": \"{{ $('Insertar reunión en Supabase').item.json.fecha_inicio ? $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(11,16) : '' }}\",\n    \"duracion\": {{ $('Insertar reunión en Supabase').item.json.duracion_minutos || 60 }},\n    \"join_url\": \"{{ $('Create a meeting').item.json.join_url }}\",\n    \"tipo\": \"virtual\"\n  },\n  \"destinatarios\": {{ JSON.stringify($('Code in JavaScript1').item.json.invitados_finales) }}\n}\n",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
@@ -229,37 +229,10 @@
     },
     {
       "parameters": {
-        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/usuarios",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "select",
-              "value": "=id,correo,nivel_suscripcion"
-            },
-            {
-              "name": "correo",
-              "value": "=in.({{ $('Code in JavaScript').item.json.correos }})"
-            }
-          ]
-        },
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
-            },
-            {
-              "name": "Authorization",
-              "value": "=Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhicW9ueW5rdmp0bm5vdmZndWRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyOTMyMTAsImV4cCI6MjA5ODg2OTIxMH0.TVhJn-bAGMGoteBHB9w8mH0N6rKbfdAnO-XiXfuIpS8"
-            }
-          ]
-        },
-        "options": {}
+        "jsCode": "const correos = $('Code in JavaScript').first().json.correos || [];\n\nif (!Array.isArray(correos) || correos.length === 0) {\n  return [];\n}\n\nreturn correos.map(correo => ({\n  json: {\n    correo: correo.trim().toLowerCase(),\n    id: null\n  }\n}));"
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         144,
         160
@@ -294,10 +267,10 @@
     {
       "parameters": {
         "authentication": "oAuth2",
-        "topic": "={{$node[\"Code in JavaScript\"].json.asunto}}\n",
+        "topic": "={{$node[\"Code in JavaScript\"].json.asunto}}",
         "additionalFields": {
-          "duration": 60,
-          "startTime": "={{$node[\"Code in JavaScript\"].json.fecha_iso}}\n"
+          "duration": "={{$node[\"Code in JavaScript\"].json.duracion_minutos}}",
+          "startTime": "={{$node[\"Code in JavaScript\"].json.fecha_iso}}"
         }
       },
       "type": "n8n-nodes-base.zoom",
@@ -342,7 +315,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"creador_id\": \"{{$node['Code in JavaScript'].json.creador_id}}\",\n  \"tema\": \"{{$node['Code in JavaScript'].json.asunto}}\",\n  \"fecha_inicio\": \"{{ new Date($node['Code in JavaScript'].json.fecha_iso).toISOString() }}\",\n  \"duracion_minutos\": {{$node['Code in JavaScript'].json.duracion_minutos}},\n  \n  \"proveedor\": \"zoom\",\n  \"id_externo\": \"{{$node['Create a meeting'].json.id}}\",\n  \"join_url\": \"{{$node['Create a meeting'].json.join_url}}\",\n  \"start_url\": \"{{$node['Create a meeting'].json.start_url}}\",\n  \"estado\": \"programada\"\n}\n",
+        "jsonBody": "={\n  \"creador_id\": \"{{$node['Code in JavaScript'].json.creador_id}}\",\n  \"tema\": \"{{$node['Code in JavaScript'].json.asunto}}\",\n  \"fecha_inicio\": \"{{$node['Code in JavaScript'].json.fecha_iso}}\",\n  \"duracion_minutos\": {{ $node['Code in JavaScript'].json.duracion_minutos ? parseInt($node['Code in JavaScript'].json.duracion_minutos) : 60 }},\n  \"proveedor\": \"zoom\",\n  \"id_externo\": \"{{ $node['Create a meeting'].json.id ? $node['Create a meeting'].json.id : '' }}\",\n  \"join_url\": \"{{ $node['Create a meeting'].json.join_url ? $node['Create a meeting'].json.join_url : '' }}\",\n  \"start_url\": \"{{ $node['Create a meeting'].json.start_url ? $node['Create a meeting'].json.start_url : '' }}\",\n  \"estado\": \"programada\"\n}\n",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -382,11 +355,19 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={\n  \"reunion_id\": \"{{ $('Insertar reunión en Supabase').item.json.id }}\",\n  \"correo\": \"{{$json.correo}}\",\n  \"usuario_id\": \"{{$json.usuario_id}}\",\n  \"rol\": \"participante\",\n  \"estado_invitacion\": \"enviado\"\n}\n",
-        "options": {}
+        "body": "={\n  \"reunion_id\": \"{{ $('Insertar reunión en Supabase').item.json.id }}\",\n  \"correo\": \"{{$json.correo}}\",\n  \"usuario_id\": {{ $json.usuario_id || null }},\n  \"rol\": \"participante\",\n  \"estado_invitacion\": \"enviado\"\n}\n",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 0
+            }
+          }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
+      "alwaysOutputData": true,
       "position": [
         1376,
         -80
@@ -409,10 +390,10 @@
     },
     {
       "parameters": {
-        "sendTo": "={{$json.correo}}",
-        "subject": "=Invitación a reunión",
-        "emailType": "text",
-        "message": "=Hola,\n\nHas sido invitado a una reunión:\n\n📌 Tema: {{ $('Create a meeting').item.json.topic }}\n📅 Fecha: {{ $('Create a meeting').item.json.start_time }}\n⏱ Duración: {{ $('Create a meeting').item.json.duration }} minutos\n🔗 Link: {{ $('Create a meeting').item.json.join_url }}\n\nPor favor confirma tu asistencia.\n\nSaludos!\n",
+        "sendTo": "={{$('Code in JavaScript2').item.json.correo}}",
+        "subject": "=Invitación: {{ $('Code in JavaScript').item.json.asunto }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;\"><div style=\"background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;\"><h1 style=\"color: #ffffff; margin: 0; font-size: 22px;\">📅 Invitación a Reunión</h1></div><div style=\"padding: 30px;\"><table style=\"width: 100%; border-collapse: collapse; margin-bottom: 20px;\"><tr><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; color: #666; font-size: 13px; width: 120px;\">Tema</td><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; font-weight: bold; font-size: 15px;\">{{ $('Create a meeting').item.json.topic }}</td></tr><tr><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; color: #666; font-size: 13px;\">Fecha</td><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; font-size: 15px;\">{{ $('Insertar reunión en Supabase').item.json.fecha_inicio ? $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(8,10) + '/' + $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(5,7) + '/' + $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(0,4) : '' }}</td></tr><tr><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; color: #666; font-size: 13px;\">Hora</td><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; font-size: 15px;\">{{ $('Insertar reunión en Supabase').item.json.fecha_inicio ? $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(11,16) + ' (GMT-5)' : '' }}</td></tr><tr><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; color: #666; font-size: 13px;\">Duración</td><td style=\"padding: 12px 0; border-bottom: 1px solid #f0f0f0; font-size: 15px;\">{{ $('Create a meeting').item.json.duration }} minutos</td></tr></table><div style=\"text-align: center; margin: 25px 0;\"><a href=\"{{ $('Create a meeting').item.json.join_url }}\" style=\"display: inline-block; background: #667eea; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 6px; font-weight: bold; font-size: 15px;\">Unirse a la reunión</a></div><p style=\"color: #999; font-size: 12px; text-align: center; margin-top: 20px;\">Este enlace es personal. No lo compartas con otras personas.</p></div></div>",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
@@ -481,7 +462,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Solo ese nivel?": {
@@ -580,6 +567,17 @@
       ]
     },
     "Insertar Participantes": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
       "main": [
         [
           {

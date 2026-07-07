@@ -1,4 +1,4 @@
-import os, json, requests
+import os, json, requests, base64
 import time
 import re
 import pandas as pd
@@ -191,6 +191,74 @@ def inject_custom_styles():
         margin-top: 1rem;
         margin-bottom: 0.85rem;
     }
+
+    .auth-card-header {
+        text-align: center;
+        margin-bottom: 1.6rem;
+    }
+
+    .auth-card-eyebrow {
+        font-size: 0.74rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #2563eb;
+        font-weight: 700;
+        margin-bottom: 0.4rem;
+    }
+
+    .auth-card-title {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0 0 0.35rem 0;
+    }
+
+    .auth-card-subtitle {
+        font-size: 0.92rem;
+        color: #64748b;
+        line-height: 1.5;
+    }
+
+    .auth-switch {
+        text-align: center;
+        margin-top: 1.2rem;
+        font-size: 0.88rem;
+        color: #64748b;
+    }
+
+    form[data-testid="stForm"] {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 50%, #eff6ff 100%);
+        border: 1px solid #dbeafe;
+        border-radius: 24px;
+        padding: 2rem 2.2rem !important;
+        box-shadow: 0 14px 40px rgba(37, 99, 235, 0.08), 0 2px 8px rgba(0,0,0,0.04);
+        max-width: 440px;
+        margin: 0 auto;
+    }
+
+    form[data-testid="stForm"] [data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(135deg, #2563eb, #0284c7);
+        color: #fff;
+        border: none;
+        border-radius: 14px;
+        padding: 0.65rem 1.2rem;
+        font-weight: 700;
+        font-size: 0.95rem;
+        width: 100%;
+        transition: all 0.2s ease;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+    }
+
+    form[data-testid="stForm"] [data-testid="stFormSubmitButton"] > button:hover {
+        background: linear-gradient(135deg, #1d4ed8, #0369a1);
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35);
+        transform: translateY(-1px);
+    }
+
+    form[data-testid="stForm"] [data-testid="stFormSubmitButton"] > button:active {
+        transform: translateY(0);
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
@@ -556,6 +624,24 @@ def hash_pw(pw: str) -> str:
 def verify_pw(pw: str, hashed: str) -> bool:
     return bcrypt.verify(pw, hashed)
 
+def format_fecha_ddmmyyyy(fecha_iso: str) -> str:
+    if not fecha_iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y")
+    except Exception:
+        return fecha_iso
+
+def format_hora_lima(fecha_iso: str) -> str:
+    if not fecha_iso:
+        return ""
+    try:
+        dt = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
+        return dt.strftime("%H:%M")
+    except Exception:
+        return fecha_iso[11:16] if len(fecha_iso) >= 16 else ""
+
 # -------- Admin helper --------
 def is_admin() -> bool:
     try:
@@ -841,49 +927,80 @@ def tareas_to_pdf_bytes(title: str, df: pd.DataFrame) -> bytes:
     
     return pdf_bytes
 
+def _save_session_to_qp():
+    s = st.session_state.get("session")
+    if s:
+        st.query_params["session"] = base64.b64encode(json.dumps(s).encode()).decode()
+    elif "session" in st.query_params:
+        del st.query_params["session"]
+
+def _load_session_from_qp():
+    token = st.query_params.get("session")
+    if token and st.session_state.session is None:
+        try:
+            st.session_state.session = json.loads(base64.b64decode(token.encode()).decode())
+        except Exception:
+            st.query_params.clear()
+
 if "session" not in st.session_state:
     st.session_state.session = None
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
+_load_session_from_qp()
+
 # -------- Auth Views --------
 def view_login():
-    st.subheader("Iniciar sesión")
-    email = st.text_input("Correo", key="login_email")
-    pw = st.text_input("Contraseña", type="password", key="login_pw")
-    if st.button("Ingresar", use_container_width=True):
-        try:
-            data = sb_select("usuarios", {"select":"id,correo,nombre,password_hash,nivel_suscripcion,estado_suscripcion", "correo": f"eq.{email}"})
-            if not data: st.error("Usuario no encontrado"); return
-            u = data[0]
-            if not verify_pw(pw, u["password_hash"]): st.error("Credenciales inválidas"); return
-            st.session_state.session = {
-                "id": u["id"], "correo": u["correo"], "nombre": u["nombre"],
-                "nivel": u["nivel_suscripcion"], "estado": u["estado_suscripcion"]
-            }
-            st.success("¡Bienvenido!")
-            st.rerun()
-        except Exception as e:
-            st.error(str(e))
+    with st.form("login_form"):
+        st.markdown("""
+        <div class="auth-card-header">
+            <div class="auth-card-eyebrow">Zoom2</div>
+            <div class="auth-card-title">Bienvenido de vuelta</div>
+            <div class="auth-card-subtitle">Ingresa tus credenciales para acceder al panel de reuniones.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        email = st.text_input("Correo electrónico", key="login_email", placeholder="tucorreo@ejemplo.com")
+        pw = st.text_input("Contraseña", type="password", key="login_pw", placeholder="••••••••")
+        if st.form_submit_button("Iniciar sesión", use_container_width=True):
+            try:
+                data = sb_select("usuarios", {"select":"id,correo,nombre,password_hash,nivel_suscripcion,estado_suscripcion", "correo": f"eq.{email}"})
+                if not data: st.error("Usuario no encontrado"); return
+                u = data[0]
+                if not verify_pw(pw, u["password_hash"]): st.error("Credenciales inválidas"); return
+                st.session_state.session = {
+                    "id": u["id"], "correo": u["correo"], "nombre": u["nombre"],
+                    "nivel": u["nivel_suscripcion"], "estado": u["estado_suscripcion"]
+                }
+                _save_session_to_qp()
+                st.rerun()
+            except Exception as e:
+                st.error(str(e))
 
 def view_register():
-    st.subheader("Registrarse")
-    nombre = st.text_input("Nombre", key="reg_nombre")
-    correo = st.text_input("Correo", key="reg_correo")
-    pw = st.text_input("Contraseña", type="password", key="reg_pw")
-    if st.button("Crear cuenta", use_container_width=True):
-        if not (nombre and correo and pw): st.warning("Completa todo"); return
-        try:
-            sb_insert("usuarios", [{
-                "nombre": nombre,
-                "correo": correo,
-                "password_hash": hash_pw(pw),
-                "nivel_suscripcion": "basico",
-                "estado_suscripcion": "activo"
-            }])
-            st.success("Cuenta creada. Inicia sesión.")
-        except Exception as e:
-            st.error(str(e))
+    with st.form("register_form"):
+        st.markdown("""
+        <div class="auth-card-header">
+            <div class="auth-card-eyebrow">Zoom2</div>
+            <div class="auth-card-title">Crear cuenta</div>
+            <div class="auth-card-subtitle">Regístrate para empezar a gestionar tus reuniones.</div>
+        </div>
+        """, unsafe_allow_html=True)
+        nombre = st.text_input("Nombre completo", key="reg_nombre", placeholder="Tu nombre")
+        correo = st.text_input("Correo electrónico", key="reg_correo", placeholder="tucorreo@ejemplo.com")
+        pw = st.text_input("Contraseña", type="password", key="reg_pw", placeholder="Mínimo 6 caracteres")
+        if st.form_submit_button("Crear cuenta", use_container_width=True):
+            if not (nombre and correo and pw): st.warning("Completa todos los campos"); return
+            try:
+                sb_insert("usuarios", [{
+                    "nombre": nombre,
+                    "correo": correo,
+                    "password_hash": hash_pw(pw),
+                    "nivel_suscripcion": "basico",
+                    "estado_suscripcion": "activo"
+                }])
+                st.success("Cuenta creada. Ahora inicia sesión.")
+            except Exception as e:
+                st.error(str(e))
 
 # -------- Chat Reuniones --------
 def view_chat():
@@ -1054,9 +1171,17 @@ def view_chat():
                 )
                 
                 if resp.status_code == 200:
-                    data = resp.json()
+                    body = resp.text.strip()
+                    if not body:
+                        raise Exception("El webhook n8n devolvió una respuesta vacía. Verifica que el workflow esté activo y el nodo 'Respond to Webhook' esté configurado correctamente.")
+                    try:
+                        data = resp.json()
+                    except json.JSONDecodeError:
+                        raise Exception(f"El webhook n8n devolvió contenido inválido (status 200). Body: '{resp.text[:300]}'. Revisa que el webhook responda con JSON válido.")
                     tema = esc_html(data.get('meeting', {}).get('tema', ''))
                     fecha = esc_html(data.get('meeting', {}).get('fecha', ''))
+                    hora = esc_html(data.get('meeting', {}).get('hora', ''))
+                    duracion = data.get('meeting', {}).get('duracion')
                     tipo_resp = data.get('meeting', {}).get('tipo') or data.get('tipo')
                     dir_resp = data.get('meeting', {}).get('direccion') or data.get('direccion')
                     join_url = data.get('meeting', {}).get('join_url', '')
@@ -1102,20 +1227,22 @@ def view_chat():
                         participantes_emails = tmp
 
                     invitados_html = esc_html(', '.join(participantes_emails)) if participantes_emails else ""
-                    es_presencial = bool(tipo_resp) and str(tipo_resp).strip().lower() == "presencial"
 
                     rows_html = ""
                     rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Tema</span><span class="chat-response-value">{tema}</span></div>'
-                    rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Fecha</span><span class="chat-response-value">{fecha}</span></div>'
+                    fecha_hora = f"{fecha} {hora} (GMT-5)" if hora else fecha
+                    rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Fecha y hora</span><span class="chat-response-value">{fecha_hora}</span></div>'
+                    if duracion:
+                        rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Duración</span><span class="chat-response-value">{duracion} min</span></div>'
+                    es_presencial = str(tipo_resp or '').strip().lower() == "presencial"
                     if not es_presencial and join_url:
                         rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Enlace</span><span class="chat-response-link"><a href="{esc_html(join_url)}" target="_blank">{esc_html(join_url)}</a></span></div>'
                     if invitados_html:
                         rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Invitados</span><span class="chat-response-value">{invitados_html}</span></div>'
-                    if not es_presencial:
-                        if tipo_resp:
-                            rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Tipo</span><span class="chat-response-value">{esc_html(tipo_resp)}</span></div>'
-                        if dir_resp:
-                            rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Dirección</span><span class="chat-response-value">{esc_html(dir_resp)}</span></div>'
+                    if tipo_resp:
+                        rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Tipo</span><span class="chat-response-value">{esc_html(tipo_resp)}</span></div>'
+                    if dir_resp:
+                        rows_html += f'<div class="chat-response-row"><span class="chat-response-label">Dirección</span><span class="chat-response-value">{esc_html(dir_resp)}</span></div>'
 
                     resumen_html = f"""
                     <div class="chat-response-card">
@@ -1387,7 +1514,7 @@ def view_reuniones():
 
     # Formatear fechas
     for r in reuniones:
-        r["fecha_inicio"] = r["fecha_inicio"].replace("T", " ").replace("Z", "") if r["fecha_inicio"] else r["fecha_inicio"]
+        r["fecha_inicio"] = format_fecha_ddmmyyyy(r["fecha_inicio"]) if r["fecha_inicio"] else r["fecha_inicio"]
 
     df = pd.DataFrame(reuniones)
 
@@ -1399,10 +1526,11 @@ def view_reuniones():
         df = df[df["estado"] == filtro_estado]
 
     if filtro_fecha:
-        filtro_str = filtro_fecha.strftime("%Y-%m-%d")
+        filtro_str = filtro_fecha.strftime("%d/%m/%Y")
         df = df[df["fecha_inicio"].str.startswith(filtro_str)]
 
-    df = df.sort_values(by="fecha_inicio", ascending=False)
+    df["_fecha_sort"] = pd.to_datetime(df["fecha_inicio"], format="%d/%m/%Y", errors="coerce")
+    df = df.sort_values(by="_fecha_sort", ascending=False).drop(columns=["_fecha_sort"])
 
     st.subheader("Reuniones registradas")
 
@@ -1430,7 +1558,7 @@ def view_reuniones():
     with colg1:
         try:
             dfg = df.copy()
-            dfg["fecha_dt"] = pd.to_datetime(dfg["fecha_inicio"], errors="coerce")
+            dfg["fecha_dt"] = pd.to_datetime(dfg["fecha_inicio"], format="%d/%m/%Y", errors="coerce")
             dfg = dfg.dropna(subset=["fecha_dt"]).copy()
             dfg["ym"] = dfg["fecha_dt"].dt.to_period("M").astype(str)
             cdata = dfg.groupby("ym").size().reset_index(name="reuniones")
@@ -1493,7 +1621,7 @@ def view_reuniones():
     # Selección por lista e ID
     opciones = {}
     for r in df.to_dict("records"):
-        label = f"{r.get('tema','(Sin tema)')} — {r.get('fecha_inicio','')} (ID {r.get('id')})"
+        label = f"{r.get('tema','(Sin tema)')} — {format_fecha_ddmmyyyy(r.get('fecha_inicio',''))} (ID {r.get('id')})"
         opciones[label] = r.get("id")
     opciones_list = ["— Selecciona —"] + list(opciones.keys())
     sel_reu = st.selectbox("Escoge una reunión", opciones_list, key="sel_reu_admin")
@@ -1628,7 +1756,7 @@ def view_resumen_reuniones():
     # Formatear fecha para visualización
     for r in reuniones:
         if r.get("fecha_inicio"):
-            r["fecha_inicio"] = r["fecha_inicio"].replace("T", " ").replace("Z", "")
+            r["fecha_inicio"] = format_fecha_ddmmyyyy(r["fecha_inicio"])
 
     df_total = pd.DataFrame(reuniones)
     if df_total.empty:
@@ -1687,7 +1815,7 @@ def view_resumen_reuniones():
                   det = {
                       "ID": fila.get("id"),
                       "Tema": fila.get("tema"),
-                      "Fecha": (fila.get("fecha_inicio") or "").replace("T"," ").replace("Z",""),
+                      "Fecha": format_fecha_ddmmyyyy(fila.get("fecha_inicio")),
                       "Duración (min)": fila.get("duracion_minutos"),
                       "Tipo": fila.get("tipo"),
                       "Estado": fila.get("estado"),
@@ -1781,7 +1909,13 @@ def view_resumen_reuniones():
                                   )
                                   
                                   if resp.status_code == 200:
-                                      data = resp.json()
+                                      body = resp.text.strip()
+                                      if not body:
+                                          raise Exception("El webhook resumen-virtual respondió 200 con body vacío.")
+                                      try:
+                                          data = resp.json()
+                                      except json.JSONDecodeError:
+                                          raise Exception(f"El webhook virtual devolvió contenido inválido (status 200). Body: '{resp.text[:300]}'.")
                                       resumen_texto = data.get("resumen") or data.get("summary") or ""
                                       if resumen_texto:
                                           if save_resumen(reunion_id, resumen_texto):
@@ -1934,7 +2068,7 @@ def view_participantes():
     try:
         lista = sb_select("reuniones", {"select": "id,tema,fecha_inicio,tipo"})
         for r in lista:
-            label = f"{r.get('tema','(Sin tema)')} — {str(r.get('fecha_inicio') or '').replace('T',' ').replace('Z','')} ({r.get('tipo','')}) (ID {r.get('id')})"
+            label = f"{r.get('tema','(Sin tema)')} — {format_fecha_ddmmyyyy(r.get('fecha_inicio'))} ({r.get('tipo','')}) (ID {r.get('id')})"
             opciones[label] = r.get("id")
     except Exception:
         lista = []
@@ -2095,7 +2229,7 @@ def view_tareas():
                     "id": f"in.({','.join(str(r) for r in batch)})"
                 }
                 reuniones_batch = sb_select("reuniones", params)
-                reuniones_info.update({r['id']: f"{r['tema']} ({r['fecha_inicio'][:10]})" for r in reuniones_batch})
+                reuniones_info.update({r['id']: f"{r['tema']} ({format_fecha_ddmmyyyy(r['fecha_inicio'])})" for r in reuniones_batch})
             
             # Agregar nombre de reunión a cada tarea
             for tarea in tareas:
@@ -2112,7 +2246,7 @@ def view_tareas():
             with st.form("nueva_tarea"):
                 try:
                     reuniones = sb_select("reuniones", {"select": "id,tema,fecha_inicio", "order": "fecha_inicio.desc", "limit": "50"})
-                    opciones_reuniones = {f"{r['tema']} ({r['fecha_inicio'][:10]})": r['id'] for r in reuniones}
+                    opciones_reuniones = {f"{r['tema']} ({format_fecha_ddmmyyyy(r['fecha_inicio'])})": r['id'] for r in reuniones}
                     reunion_sel = st.selectbox("Reunión", list(opciones_reuniones.keys()))
                     descripcion = st.text_area("Descripción de la tarea")
                     asignado = st.text_input("Asignado a (correo)")
@@ -2517,7 +2651,7 @@ def view_tareas():
                     "order": "fecha_inicio.desc",
                     "limit": "50"
                 })
-                opciones_reuniones = {f"{r['tema']} ({r['fecha_inicio'][:10]})": r['id'] for r in reuniones}
+                opciones_reuniones = {f"{r['tema']} ({format_fecha_ddmmyyyy(r['fecha_inicio'])})": r['id'] for r in reuniones}
                 
                 reunion_sel = st.selectbox("Reunión", list(opciones_reuniones.keys()))
                 descripcion = st.text_area("Descripción de la tarea", height=100)
@@ -2786,9 +2920,11 @@ def view_metricas():
 inject_custom_styles()
 if st.session_state.session is None:
     render_public_sidebar()
-    t1, t2 = st.tabs(["Iniciar sesión", "Registrarse"])
-    with t1: view_login()
-    with t2: view_register()
+    auth_tab = st.radio("auth_tab", ["Iniciar sesión", "Registrarse"], horizontal=True, label_visibility="collapsed")
+    if auth_tab == "Iniciar sesión":
+        view_login()
+    else:
+        view_register()
 else:
     admin = is_admin()
     opciones_menu = ["Chat", "Reuniones", "Tareas", "Resumen de reuniones", "Participantes", "Métricas", "Cerrar sesión"]
@@ -2811,4 +2947,5 @@ else:
         view_metricas()
     elif page == "Cerrar sesión":
         st.session_state.clear()
+        st.query_params.clear()
         st.rerun()
