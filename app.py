@@ -1741,9 +1741,8 @@ def view_reuniones():
 
 # -------- Resumen de reuniones --------
 def view_resumen_reuniones():
-    st.title("📝 Resumen de reuniones")
-
-    # Obtener reuniones con campos clave
+    render_resumen_styles()
+    # Obtener reuniones
     try:
         reuniones = sb_select(
             "reuniones",
@@ -1753,311 +1752,488 @@ def view_resumen_reuniones():
         st.error(f"Error cargando reuniones: {e}")
         return
 
-    # Formatear fecha para visualización
     for r in reuniones:
         if r.get("fecha_inicio"):
             r["fecha_inicio"] = format_fecha_ddmmyyyy(r["fecha_inicio"])
 
     df_total = pd.DataFrame(reuniones)
     if df_total.empty:
-        st.info("No hay reuniones registradas.")
+        st.markdown("""
+        <div class="resumen-empty-card">
+            <div style="font-size:1rem;font-weight:700;color:#0f172a;margin-bottom:0.35rem;">📝 No hay reuniones registradas</div>
+            <p style="font-size:0.92rem;color:#64748b;margin:0;">Crea una reunión desde el panel de Reuniones o mediante el Chat asistido para comenzar.</p>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
-    # Asegurar columna tipo en minúsculas para filtro
     df_total["tipo"] = df_total["tipo"].astype(str).str.lower()
+
+    # Hero section
+    total_reuniones = len(df_total)
+    con_resumen = 0
+    for rid in df_total["id"].unique():
+        try:
+            rr = sb_select("resumenes", {"select":"id", "reunion_id": f"eq.{rid}"})
+            if rr and rr[0].get("id"):
+                con_resumen += 1
+        except Exception:
+            pass
+
+    st.markdown(f"""
+    <div class="resumen-hero">
+        <div class="chat-eyebrow" style="color:#a16207;">Gestión de resúmenes</div>
+        <div class="chat-title" style="font-size:1.7rem;">📝 Resumen de reuniones</div>
+        <p class="chat-copy">Selecciona una reunión para ver, generar o actualizar su resumen. Los resúmenes virtuales se generan por IA y los presenciales mediante actas en PDF.</p>
+        <div class="resumen-chip-row">
+            <span class="resumen-chip">{total_reuniones} reuniones</span>
+            <span class="resumen-chip">{con_resumen} con resumen</span>
+            <span class="resumen-chip-warn" style="display:inline-flex;align-items:center;padding:0.25rem 0.6rem;border-radius:999px;background:#fefce8;color:#a16207;border:1px solid #fde68a;font-size:0.78rem;font-weight:600;">{total_reuniones - con_resumen} pendientes</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     col_v, col_p, col_m = st.columns(3)
 
-    def render_columna(col, df_filtro, nombre, key_prefix):
-      with col:
-          st.subheader(nombre)
-          mostrar_cols = [c for c in ["id","tema","fecha_inicio","estado","direccion"] if c in df_filtro.columns]
-          st.dataframe(df_filtro[mostrar_cols].reset_index(drop=True), use_container_width=True)
+    def esc_html(text):
+        import html
+        return html.escape(str(text))
 
-          # Lista desplegable y/o búsqueda por ID de reunión
-          opciones = {}
-          for r in df_filtro.to_dict("records"):
-              label = f"{r.get('tema','(Sin tema)')} — {r.get('fecha_inicio','')} (ID {r.get('id')})"
-              opciones[label] = r.get("id")
-          opciones_list = ["— Selecciona —"] + list(opciones.keys())
-          sel_val = st.selectbox("Escoge una reunión", opciones_list, key=f"sel_{key_prefix}")
+    def render_columna(col, df_filtro, nombre, key_prefix, icono):
+        with col:
+            count = len(df_filtro)
+            st.markdown(f"""
+            <div class="resumen-column-card">
+                <div class="resumen-column-header">{icono} {nombre} <span class="badge">{count}</span></div>
+            """, unsafe_allow_html=True)
 
-          st.caption("O busca por ID de la reunión")
-          input_id = st.text_input("ID de reunión", key=f"id_{key_prefix}", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+            if df_filtro.empty:
+                st.markdown('<p style="font-size:0.85rem;color:#94a3b8;padding:0.5rem 0;">Sin reuniones</p>', unsafe_allow_html=True)
+                st.markdown('</div>', unsafe_allow_html=True)
+                return
 
-          chosen_id = None
-          if sel_val and sel_val != "— Selecciona —":
-              chosen_id = opciones[sel_val]
-          if input_id:
-              chosen_id = input_id
+            # Mini tabla estilizada
+            mostrar_cols = [c for c in ["tema","fecha_inicio","estado"] if c in df_filtro.columns]
+            rows_html = '<div class="resumen-table-wrap"><table><thead><tr><th>Tema</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>'
+            for _, r in df_filtro.head(8).iterrows():
+                tema = esc_html(str(r.get("tema","(Sin tema)"))[:40])
+                fecha = esc_html(str(r.get("fecha_inicio","")))
+                estado = esc_html(str(r.get("estado","")))
+                dot_class = "completado" if estado.lower() == "completada" else ("pendiente" if estado.lower() in ["pendiente","programada"] else "cancelado")
+                rows_html += f'<tr><td>{tema}</td><td>{fecha}</td><td><span class="resumen-status-dot {dot_class}"></span>{estado}</td></tr>'
+            if len(df_filtro) > 8:
+                rows_html += f'<tr><td colspan="3" style="text-align:center;color:#94a3b8;font-style:italic;">… y {len(df_filtro)-8} más</td></tr>'
+            rows_html += '</tbody></table></div>'
+            st.markdown(rows_html, unsafe_allow_html=True)
 
-          if chosen_id:
-              # Buscar en el dataframe filtrado, o consultar directamente por ID
-              fila = None
-              if not df_filtro.empty and chosen_id in set(df_filtro["id"].astype(str)):
-                  fila = df_filtro[df_filtro["id"].astype(str) == chosen_id].iloc[0].to_dict()
-              else:
-                  try:
-                      q = sb_select(
-                          "reuniones",
-                          {"select":"id,tema,fecha_inicio,duracion_minutos,tipo,estado,direccion,join_url,start_url,proveedor,creador_id", "id": f"eq.{chosen_id}"}
-                      )
-                      if q:
-                          fila = q[0]
-                  except Exception as e:
-                      st.error(f"Error buscando reunión: {e}")
-                      return
+            # Filter section
+            st.markdown('<div class="resumen-filter-section" style="padding:0.75rem 0.85rem;margin-bottom:0;">', unsafe_allow_html=True)
+            st.markdown('<div class="resumen-filter-copy" style="margin-bottom:0.4rem;">Selecciona una reunión</div>', unsafe_allow_html=True)
 
-              if fila:
-                  # Detalles de la reunión
-                  reunion_id = str(fila.get("id"))
-                  st.markdown("**Detalles de la reunión**")
-                  det = {
-                      "ID": fila.get("id"),
-                      "Tema": fila.get("tema"),
-                      "Fecha": format_fecha_ddmmyyyy(fila.get("fecha_inicio")),
-                      "Duración (min)": fila.get("duracion_minutos"),
-                      "Tipo": fila.get("tipo"),
-                      "Estado": fila.get("estado"),
-                      "Dirección": fila.get("direccion"),
-                      "Enlace": fila.get("join_url"),
-                  }
-                  st.json(det)
-                  # Ver participantes de la reunión
-                  if st.button("👥 Ver participantes", key=f"ver_part_{key_prefix}"):
-                      try:
-                          parts = sb_select(
-                              "participantes",
-                              {"select":"correo,rol,estado_invitacion,fecha_creacion", "reunion_id": f"eq.{reunion_id}"}
-                          )
-                          if not parts:
-                              st.info("No hay participantes registrados para esta reunión.")
-                          else:
-                              # Formatear fecha
-                              for p in parts:
-                                  if p.get("fecha_creacion"):
-                                      p["fecha_creacion"] = p["fecha_creacion"].replace("T"," ").replace("Z","")
-                              with st.expander("Participantes", expanded=False):
-                                  st.dataframe(pd.DataFrame(parts), use_container_width=True)
-                                  # Métricas rápidas
-                                  total = len(parts)
-                                  orgs = sum(1 for p in parts if str(p.get("rol","")) == "organizador")
-                                  partics = sum(1 for p in parts if str(p.get("rol","")) == "participante")
-                                  m1, m2, m3 = st.columns(3)
-                                  m1.metric("Total", total)
-                                  m2.metric("Organizadores", orgs)
-                                  m3.metric("Participantes", partics)
-                                  # Donut de estados de invitación
-                                  try:
-                                      dfc = pd.DataFrame(parts)
-                                      cdata = dfc.groupby("estado_invitacion").size().reset_index(name="conteo")
-                                      chart = alt.Chart(cdata).mark_arc(innerRadius=40).encode(
-                                          theta=alt.Theta("conteo:Q", stack=True),
-                                          color=alt.Color("estado_invitacion:N", scale=alt.Scale(scheme="pastel2")),
-                                          tooltip=["estado_invitacion:N","conteo:Q"]
-                                      ).properties(height=180)
-                                      st.altair_chart(chart, use_container_width=True)
-                                  except Exception:
-                                      pass
-                      except Exception as e:
-                          st.error(f"Error cargando participantes: {e}")
+            opciones = {}
+            for r in df_filtro.to_dict("records"):
+                label = f"{r.get('tema','(Sin tema)')} — {r.get('fecha_inicio','')}"
+                opciones[label] = r.get("id")
+            opciones_list = ["— Selecciona —"] + list(opciones.keys())
+            sel_val = st.selectbox("", opciones_list, key=f"sel_{key_prefix}", label_visibility="collapsed")
 
-                  # Resumen existente
-                  try:
-                      res = sb_select(
-                          "resumenes",
-                          {"select": "id,reunion_id,resumen,fecha_creacion", "reunion_id": f"eq.{reunion_id}"}
-                      )
-                  except Exception as e:
-                      st.error(f"Error cargando resumen: {e}")
-                      return
+            st.caption("O busca por ID")
+            input_id = st.text_input("", key=f"id_{key_prefix}", placeholder="ID de reunión", label_visibility="collapsed")
 
-                  if res:
-                      item = res[0]
-                      st.markdown("**Resumen**")
-                      st.write(item.get("resumen") or "(Vacío)")
-                      if item.get("fecha_creacion"):
-                          st.caption(f"Creado: {item['fecha_creacion'].replace('T',' ').replace('Z','')}")
-                  else:
-                      st.info("No existe un resumen para esta reunión.")
+            chosen_id = None
+            if sel_val and sel_val != "— Selecciona —":
+                chosen_id = opciones[sel_val]
+            if input_id:
+                chosen_id = input_id
 
-                  # Generación según tipo
-                  tipo_val = str(fila.get("tipo") or "").lower()
-                  if tipo_val in ["virtual", "mixta"]:
-                      btn = st.button("📝 Generar resumen (IA)", key=f"gen_{key_prefix}")
-                      if btn:
-                          if not N8N_RESUMEN_VIRTUAL_URL:
-                              st.error("Configura N8N_RESUMEN_VIRTUAL_WEBHOOK_URL en .env")
-                          else:
-                              try:
-                                  inicio = time.time()
-                                  with st.spinner("Generando resumen..."):
-                                      resp = requests.post(N8N_RESUMEN_VIRTUAL_URL, json={"reunion_id": reunion_id}, timeout=120)
-                                  
-                                  # Calcular tiempo de respuesta
-                                  tiempo_respuesta = time.time() - inicio
-                                  tamano_respuesta = len(resp.content) if resp.content else 0
-                                  
-                                  # Registrar métrica
-                                  registrar_metrica_n8n(
-                                      endpoint="resumen_virtual",
-                                      tiempo_respuesta=tiempo_respuesta,
-                                      estado="éxito" if resp.status_code == 200 else "error",
-                                      codigo_estado=resp.status_code,
-                                      reunion_id=reunion_id,
-                                      tamano_respuesta=tamano_respuesta
-                                  )
-                                  
-                                  if resp.status_code == 200:
-                                      body = resp.text.strip()
-                                      if not body:
-                                          raise Exception("El webhook resumen-virtual respondió 200 con body vacío.")
-                                      try:
-                                          data = resp.json()
-                                      except json.JSONDecodeError:
-                                          raise Exception(f"El webhook virtual devolvió contenido inválido (status 200). Body: '{resp.text[:300]}'.")
-                                      resumen_texto = data.get("resumen") or data.get("summary") or ""
-                                      if resumen_texto:
-                                          if save_resumen(reunion_id, resumen_texto):
-                                              st.success("✅ Resumen generado y guardado")
-                                              st.write(resumen_texto)
-                                              if st.button("🔄 Actualizar", key=f"refresh_{key_prefix}"):
-                                                  st.rerun()
-                                          else:
-                                              st.error("No se pudo guardar el resumen")
-                                      else:
-                                          st.error("El flujo no devolvió un resumen")
-                                  else:
-                                      st.error(f"Error n8n: {resp.status_code} - {resp.text}")
-                              except Exception as e:
-                                  # Registrar error en métricas
-                                  registrar_metrica_n8n(
-                                      endpoint="resumen_virtual",
-                                      tiempo_respuesta=0,
-                                      estado="error",
-                                      detalles=f"Excepción: {str(e)}",
-                                      reunion_id=reunion_id
-                                  )
-                                  st.error(f"Error solicitando resumen: {e}")
-                  elif tipo_val == "presencial":
-                      # Verificar si ya existe un resumen para esta reunión
-                      resumen_existente = sb_select("resumenes", {"select": "id,resumen,fecha_creacion", "reunion_id": f"eq.{reunion_id}"})
-                      
-                      if resumen_existente and resumen_existente[0].get("resumen"):
-                          # Mostrar el resumen existente
-                          item = resumen_existente[0]
-                          st.markdown("### 📄 Resumen existente")
-                          st.write(item.get("resumen"))
-                          if item.get("fecha_creacion"):
-                              st.caption(f"Creado: {item['fecha_creacion'].replace('T',' ').replace('Z','')}")
-                      else:
-                          # Mostrar opción para subir PDF solo si no hay resumen
-                          archivo_pdf = st.file_uploader("Sube el acta (PDF)", type=["pdf"], key=f"pdf_{key_prefix}")
-                          if archivo_pdf is not None:
-                              st.success(f"Archivo cargado: {archivo_pdf.name}")
-                          btnp = st.button("🚀 Procesar PDF y generar resumen", key=f"genpdf_{key_prefix}")
-                          if btnp:
-                              if not N8N_RESUMEN_PRESENCIAL_URL:
-                                  st.error("Configura N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL en .env")
-                              elif not archivo_pdf:
-                                  st.warning("Primero sube un PDF")
-                              else:
-                                  try:
-                                      inicio = time.time()
-                                      with st.spinner("Procesando acta y esperando resumen..."):
-                                          # Enviar PDF al flujo n8n
-                                          files = {"file": (archivo_pdf.name, archivo_pdf.getvalue(), "application/pdf")}
-                                          data_form = {"reunion_id": reunion_id, "nombre_archivo": archivo_pdf.name}
-                                          
-                                          # Realizar la petición y medir tiempo
-                                          inicio_request = time.time()
-                                          resp = requests.post(N8N_RESUMEN_PRESENCIAL_URL, files=files, data=data_form, timeout=180)
-                                          tiempo_respuesta = time.time() - inicio_request
-                                          
-                                          # Registrar métrica básica
-                                          registrar_metrica_n8n(
-                                              endpoint="resumen_presencial",
-                                              tiempo_respuesta=tiempo_respuesta,
-                                              estado="en_proceso" if resp.status_code == 200 else "error",
-                                              codigo_estado=resp.status_code,
-                                              reunion_id=reunion_id
-                                          )
+            if chosen_id:
+                fila = None
+                if not df_filtro.empty and chosen_id in set(df_filtro["id"].astype(str)):
+                    fila = df_filtro[df_filtro["id"].astype(str) == chosen_id].iloc[0].to_dict()
+                else:
+                    try:
+                        q = sb_select(
+                            "reuniones",
+                            {"select":"id,tema,fecha_inicio,duracion_minutos,tipo,estado,direccion,join_url,start_url,proveedor,creador_id", "id": f"eq.{chosen_id}"}
+                        )
+                        if q:
+                            fila = q[0]
+                    except Exception as e:
+                        st.error(f"Error buscando reunión: {e}")
+                        st.markdown('</div></div>', unsafe_allow_html=True)
+                        return
 
-                                          # Iniciar seguimiento del tiempo total de procesamiento
-                                          inicio_procesamiento = time.time()
-                                          encontrado = False
-                                          deadline = time.time() + 120  # hasta 2 minutos de espera
-                                          
-                                          while time.time() < deadline and not encontrado:
-                                              try:
-                                                  poll = sb_select("resumenes", {
-                                                      "select": "id,reunion_id,resumen,fecha_creacion", 
-                                                      "reunion_id": f"eq.{reunion_id}"
-                                                  })
-                                                  if poll and (poll[0].get("resumen") or "").strip():
-                                                      item = poll[0]
-                                                      tiempo_total = time.time() - inicio
-                                                      
-                                                      # Actualizar métrica con resultado exitoso
-                                                      registrar_metrica_n8n(
-                                                          endpoint="resumen_presencial",
-                                                          tiempo_respuesta=tiempo_total,
-                                                          estado="éxito",
-                                                          codigo_estado=200,
-                                                          reunion_id=reunion_id,
-                                                          detalles=f"Tiempo total de procesamiento: {tiempo_total:.2f}s"
-                                                      )
-                                                      
-                                                      st.success("✅ Resumen generado y guardado")
-                                                      st.markdown("**Resumen**")
-                                                      st.write(item.get("resumen"))
-                                                      if item.get("fecha_creacion"):
-                                                          st.caption(f"Creado: {item['fecha_creacion'].replace('T',' ').replace('Z','')}")
-                                                      encontrado = True
-                                                      break
-                                              except Exception as e:
-                                                  print(f"Error al consultar resumen: {e}")
-                                              time.sleep(3)
+                if fila:
+                    reunion_id = str(fila.get("id"))
 
-                                          if not encontrado:
-                                              tiempo_total = time.time() - inicio
-                                              registrar_metrica_n8n(
-                                                  endpoint="resumen_presencial",
-                                                  tiempo_respuesta=tiempo_total,
-                                                  estado="timeout",
-                                                  reunion_id=reunion_id,
-                                                  detalles="Tiempo de espera agotado esperando el resumen"
-                                              )
-                                              st.warning("Aún no se genera el resumen. Por favor, espera unos segundos y vuelve a intentar actualizar.")
-                                  
-                                  except requests.exceptions.Timeout:
-                                      tiempo_total = time.time() - inicio
-                                      registrar_metrica_n8n(
-                                          endpoint="resumen_presencial",
-                                          tiempo_respuesta=tiempo_total,
-                                          estado="timeout",
-                                          reunion_id=reunion_id,
-                                          detalles="Timeout en la petición a n8n"
-                                      )
-                                      st.error("⏱️ Tiempo de espera agotado")
-                                  except Exception as e:
-                                      tiempo_total = time.time() - inicio
-                                      registrar_metrica_n8n(
-                                          endpoint="resumen_presencial",
-                                          tiempo_respuesta=tiempo_total,
-                                          estado="error",
-                                          reunion_id=reunion_id,
-                                          detalles=f"Excepción: {str(e)}"
-                                      )
-                                      st.error(f"Error al procesar el PDF: {e}")
+                    # Detail card
+                    join_url = fila.get("join_url") or ""
+                    enlace_html = f'<span class="resumen-detail-link"><a href="{esc_html(join_url)}" target="_blank">{esc_html(join_url)}</a></span>' if join_url else '<span class="resumen-detail-value" style="color:#94a3b8;">—</span>'
+                    st.markdown(f"""
+                    <div class="resumen-detail-card">
+                        <div class="resumen-detail-title">📋 {esc_html(str(fila.get("tema","(Sin tema)")))}</div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">ID</span><span class="resumen-detail-value" style="font-family:monospace;font-size:0.8rem;">{esc_html(str(fila.get("id","")))}</span></div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">Fecha</span><span class="resumen-detail-value">{esc_html(format_fecha_ddmmyyyy(fila.get("fecha_inicio")))}</span></div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">Duración</span><span class="resumen-detail-value">{esc_html(str(fila.get("duracion_minutos","—")))} min</span></div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">Tipo</span><span class="resumen-detail-value">{esc_html(str(fila.get("tipo","")))}</span></div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">Estado</span><span class="resumen-detail-value">{esc_html(str(fila.get("estado","")))}</span></div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">Dirección</span><span class="resumen-detail-value">{esc_html(str(fila.get("direccion","—")))}</span></div>
+                        <div class="resumen-detail-row"><span class="resumen-detail-label">Enlace</span>{enlace_html}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # Participants
+                    if st.button("👥 Ver participantes", key=f"ver_part_{key_prefix}", use_container_width=True):
+                        try:
+                            parts = sb_select(
+                                "participantes",
+                                {"select":"correo,rol,estado_invitacion,fecha_creacion", "reunion_id": f"eq.{reunion_id}"}
+                            )
+                            if not parts:
+                                st.markdown('<div class="resumen-empty-card" style="margin-top:0.5rem;"><p style="margin:0;font-size:0.9rem;color:#64748b;">No hay participantes registrados para esta reunión.</p></div>', unsafe_allow_html=True)
+                            else:
+                                for p in parts:
+                                    if p.get("fecha_creacion"):
+                                        p["fecha_creacion"] = p["fecha_creacion"].replace("T"," ").replace("Z","")
+                                total = len(parts)
+                                orgs = sum(1 for p in parts if str(p.get("rol","")) == "organizador")
+                                partics = sum(1 for p in parts if str(p.get("rol","")) == "participante")
+                                st.markdown('<div class="resumen-parts-card">', unsafe_allow_html=True)
+                                st.markdown(f'<div class="resumen-parts-title">👥 Participantes ({total})</div>', unsafe_allow_html=True)
+                                col_m1, col_m2, col_m3 = st.columns(3)
+                                with col_m1:
+                                    st.markdown(f'<div class="resumen-metric-box"><span class="num">{total}</span><span class="lbl">Total</span></div>', unsafe_allow_html=True)
+                                with col_m2:
+                                    st.markdown(f'<div class="resumen-metric-box"><span class="num">{orgs}</span><span class="lbl">Organizadores</span></div>', unsafe_allow_html=True)
+                                with col_m3:
+                                    st.markdown(f'<div class="resumen-metric-box"><span class="num">{partics}</span><span class="lbl">Participantes</span></div>', unsafe_allow_html=True)
+                                st.dataframe(pd.DataFrame(parts), use_container_width=True)
+                                try:
+                                    dfc = pd.DataFrame(parts)
+                                    cdata = dfc.groupby("estado_invitacion").size().reset_index(name="conteo")
+                                    chart = alt.Chart(cdata).mark_arc(innerRadius=40).encode(
+                                        theta=alt.Theta("conteo:Q", stack=True),
+                                        color=alt.Color("estado_invitacion:N", scale=alt.Scale(scheme="pastel2")),
+                                        tooltip=["estado_invitacion:N","conteo:Q"]
+                                    ).properties(height=180)
+                                    st.altair_chart(chart, use_container_width=True)
+                                except Exception:
+                                    pass
+                                st.markdown('</div>', unsafe_allow_html=True)
+                        except Exception as e:
+                            st.error(f"Error cargando participantes: {e}")
+
+                    # Summary section
+                    try:
+                        res = sb_select(
+                            "resumenes",
+                            {"select": "id,reunion_id,resumen,fecha_creacion", "reunion_id": f"eq.{reunion_id}"}
+                        )
+                    except Exception as e:
+                        st.error(f"Error cargando resumen: {e}")
+                        st.markdown('</div></div>', unsafe_allow_html=True)
+                        return
+
+                    if res and res[0].get("resumen"):
+                        item = res[0]
+                        st.markdown(f"""
+                        <div class="resumen-summary-card">
+                            <div class="resumen-summary-title">📄 Resumen</div>
+                            <div class="resumen-summary-text">{esc_html(item["resumen"])}</div>
+                            <div class="resumen-summary-meta">Creado: {esc_html(item.get("fecha_creacion","").replace("T"," ").replace("Z",""))}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        st.markdown("""
+                        <div class="resumen-empty-card">
+                            <p style="margin:0;font-size:0.9rem;color:#64748b;">No existe un resumen para esta reunión. Genera uno usando el botón de abajo.</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    # Generation buttons
+                    tipo_val = str(fila.get("tipo") or "").lower()
+                    if tipo_val in ["virtual", "mixta"]:
+                        btn = st.button("🤖 Generar resumen (IA)", key=f"gen_{key_prefix}", use_container_width=True)
+                        if btn:
+                            if not N8N_RESUMEN_VIRTUAL_URL:
+                                st.error("Configura N8N_RESUMEN_VIRTUAL_WEBHOOK_URL en .env")
+                            else:
+                                try:
+                                    inicio = time.time()
+                                    with st.spinner("Generando resumen…"):
+                                        resp = requests.post(N8N_RESUMEN_VIRTUAL_URL, json={"reunion_id": reunion_id}, timeout=120)
+                                    tiempo_respuesta = time.time() - inicio
+                                    tamano_respuesta = len(resp.content) if resp.content else 0
+                                    registrar_metrica_n8n(
+                                        endpoint="resumen_virtual",
+                                        tiempo_respuesta=tiempo_respuesta,
+                                        estado="éxito" if resp.status_code == 200 else "error",
+                                        codigo_estado=resp.status_code,
+                                        reunion_id=reunion_id,
+                                        tamano_respuesta=tamano_respuesta
+                                    )
+                                    if resp.status_code == 200:
+                                        body = resp.text.strip()
+                                        if not body:
+                                            raise Exception("El webhook resumen-virtual respondió 200 con body vacío.")
+                                        try:
+                                            data = resp.json()
+                                        except json.JSONDecodeError:
+                                            raise Exception(f"El webhook virtual devolvió contenido inválido (status 200). Body: '{resp.text[:300]}'.")
+                                        resumen_texto = data.get("resumen") or data.get("summary") or ""
+                                        if resumen_texto:
+                                            if save_resumen(reunion_id, resumen_texto):
+                                                st.success("✅ Resumen generado y guardado")
+                                                st.markdown(f"""
+                                                <div class="resumen-summary-card">
+                                                    <div class="resumen-summary-title">📄 Resumen generado</div>
+                                                    <div class="resumen-summary-text">{esc_html(resumen_texto)}</div>
+                                                </div>
+                                                """, unsafe_allow_html=True)
+                                                if st.button("🔄 Actualizar", key=f"refresh_{key_prefix}"):
+                                                    st.rerun()
+                                            else:
+                                                st.error("No se pudo guardar el resumen")
+                                        else:
+                                            st.error("El flujo no devolvió un resumen")
+                                    else:
+                                        st.error(f"Error n8n: {resp.status_code} - {resp.text}")
+                                except Exception as e:
+                                    registrar_metrica_n8n(
+                                        endpoint="resumen_virtual",
+                                        tiempo_respuesta=0,
+                                        estado="error",
+                                        detalles=f"Excepción: {str(e)}",
+                                        reunion_id=reunion_id
+                                    )
+                                    st.error(f"Error solicitando resumen: {e}")
+                    elif tipo_val == "presencial":
+                        resumen_existente = sb_select("resumenes", {"select": "id,resumen,fecha_creacion", "reunion_id": f"eq.{reunion_id}"})
+                        if resumen_existente and resumen_existente[0].get("resumen"):
+                            item = resumen_existente[0]
+                            st.markdown(f"""
+                            <div class="resumen-summary-card" style="border-color:#bbf7d0;background:linear-gradient(135deg,#f0fdf4 0%,#ffffff 100%);">
+                                <div class="resumen-summary-title" style="color:#15803d;">📄 Resumen existente</div>
+                                <div class="resumen-summary-text">{esc_html(item["resumen"])}</div>
+                                <div class="resumen-summary-meta">Creado: {esc_html(item.get("fecha_creacion","").replace("T"," ").replace("Z",""))}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            archivo_pdf = st.file_uploader("📎 Sube el acta (PDF)", type=["pdf"], key=f"pdf_{key_prefix}")
+                            if archivo_pdf is not None:
+                                st.markdown(f'<div style="padding:0.35rem 0.7rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;font-size:0.85rem;color:#15803d;margin-bottom:0.5rem;">✅ {esc_html(archivo_pdf.name)}</div>', unsafe_allow_html=True)
+                            btnp = st.button("🚀 Procesar PDF y generar resumen", key=f"genpdf_{key_prefix}", use_container_width=True)
+                            if btnp:
+                                if not N8N_RESUMEN_PRESENCIAL_URL:
+                                    st.error("Configura N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL en .env")
+                                elif not archivo_pdf:
+                                    st.warning("Primero sube un PDF")
+                                else:
+                                    try:
+                                        inicio = time.time()
+                                        with st.spinner("Procesando acta y esperando resumen…"):
+                                            files = {"file": (archivo_pdf.name, archivo_pdf.getvalue(), "application/pdf")}
+                                            data_form = {"reunion_id": reunion_id, "nombre_archivo": archivo_pdf.name}
+                                            inicio_request = time.time()
+                                            resp = requests.post(N8N_RESUMEN_PRESENCIAL_URL, files=files, data=data_form, timeout=180)
+                                            tiempo_respuesta = time.time() - inicio_request
+                                            registrar_metrica_n8n(
+                                                endpoint="resumen_presencial",
+                                                tiempo_respuesta=tiempo_respuesta,
+                                                estado="en_proceso" if resp.status_code == 200 else "error",
+                                                codigo_estado=resp.status_code,
+                                                reunion_id=reunion_id
+                                            )
+                                            encontrado = False
+                                            deadline = time.time() + 120
+                                            while time.time() < deadline and not encontrado:
+                                                try:
+                                                    poll = sb_select("resumenes", {
+                                                        "select": "id,reunion_id,resumen,fecha_creacion", 
+                                                        "reunion_id": f"eq.{reunion_id}"
+                                                    })
+                                                    if poll and (poll[0].get("resumen") or "").strip():
+                                                        item = poll[0]
+                                                        tiempo_total = time.time() - inicio
+                                                        registrar_metrica_n8n(
+                                                            endpoint="resumen_presencial",
+                                                            tiempo_respuesta=tiempo_total,
+                                                            estado="éxito",
+                                                            codigo_estado=200,
+                                                            reunion_id=reunion_id,
+                                                            detalles=f"Tiempo total de procesamiento: {tiempo_total:.2f}s"
+                                                        )
+                                                        st.success("✅ Resumen generado y guardado")
+                                                        st.markdown(f"""
+                                                        <div class="resumen-summary-card" style="border-color:#bbf7d0;background:linear-gradient(135deg,#f0fdf4 0%,#ffffff 100%);">
+                                                            <div class="resumen-summary-title" style="color:#15803d;">📄 Resumen</div>
+                                                            <div class="resumen-summary-text">{esc_html(item["resumen"])}</div>
+                                                            <div class="resumen-summary-meta">Creado: {esc_html(item.get("fecha_creacion","").replace("T"," ").replace("Z",""))}</div>
+                                                        </div>
+                                                        """, unsafe_allow_html=True)
+                                                        encontrado = True
+                                                        break
+                                                except Exception as e:
+                                                    print(f"Error al consultar resumen: {e}")
+                                                time.sleep(3)
+                                            if not encontrado:
+                                                tiempo_total = time.time() - inicio
+                                                registrar_metrica_n8n(
+                                                    endpoint="resumen_presencial",
+                                                    tiempo_respuesta=tiempo_total,
+                                                    estado="timeout",
+                                                    reunion_id=reunion_id,
+                                                    detalles="Tiempo de espera agotado esperando el resumen"
+                                                )
+                                                st.warning("Aún no se genera el resumen. Por favor, espera unos segundos y vuelve a intentar actualizar.")
+                                    except requests.exceptions.Timeout:
+                                        tiempo_total = time.time() - inicio
+                                        registrar_metrica_n8n(
+                                            endpoint="resumen_presencial",
+                                            tiempo_respuesta=tiempo_total,
+                                            estado="timeout",
+                                            reunion_id=reunion_id,
+                                            detalles="Timeout en la petición a n8n"
+                                        )
+                                        st.error("⏱️ Tiempo de espera agotado")
+                                    except Exception as e:
+                                        tiempo_total = time.time() - inicio
+                                        registrar_metrica_n8n(
+                                            endpoint="resumen_presencial",
+                                            tiempo_respuesta=tiempo_total,
+                                            estado="error",
+                                            reunion_id=reunion_id,
+                                            detalles=f"Excepción: {str(e)}"
+                                        )
+                                        st.error(f"Error al procesar el PDF: {e}")
+            st.markdown('</div></div>', unsafe_allow_html=True)
 
     df_v = df_total[df_total["tipo"] == "virtual"]
     df_p = df_total[df_total["tipo"] == "presencial"]
     df_m = df_total[df_total["tipo"] == "mixta"]
 
-    render_columna(col_v, df_v, "Virtual", "virtual")
-    render_columna(col_p, df_p, "Presencial", "presencial")
-    render_columna(col_m, df_m, "Mixta", "mixta")
+    render_columna(col_v, df_v, "Virtual", "virtual", "💻")
+    render_columna(col_p, df_p, "Presencial", "presencial", "🏢")
+    render_columna(col_m, df_m, "Mixta", "mixta", "🔄")
+
+def render_resumen_styles():
+    st.markdown("""
+    <style>
+    .resumen-hero {
+        background: linear-gradient(135deg, #fefce8 0%, #fffbeb 40%, #f8fafc 100%);
+        border: 1px solid #fde68a;
+        border-radius: 24px;
+        padding: 1.4rem 1.5rem;
+        margin-bottom: 1.2rem;
+        box-shadow: 0 14px 40px rgba(234, 179, 8, 0.08);
+    }
+    .resumen-hero .chat-title { color: #0f172a; }
+    .resumen-column-card {
+        background: #ffffff; border: 1px solid #e2e8f0; border-radius: 22px;
+        padding: 1rem 1rem 0.8rem 1rem;
+        box-shadow: 0 10px 32px rgba(15, 23, 42, 0.04); margin-bottom: 1rem;
+    }
+    .resumen-column-header {
+        font-size: 1.1rem; font-weight: 700; color: #0f172a;
+        margin-bottom: 0.6rem; padding-bottom: 0.5rem;
+        border-bottom: 2px solid #eef2ff; display: flex; align-items: center; gap: 0.4rem;
+    }
+    .resumen-column-header .badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        background: #eef2ff; color: #4338ca; border-radius: 999px;
+        font-size: 0.72rem; font-weight: 700; padding: 0.1rem 0.55rem; margin-left: auto;
+    }
+    .resumen-table-wrap { font-size: 0.85rem; margin-bottom: 0.7rem; }
+    .resumen-table-wrap table { width: 100%; border-collapse: collapse; }
+    .resumen-table-wrap th {
+        text-align: left; font-size: 0.72rem; font-weight: 600; color: #64748b;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        padding: 0.35rem 0.4rem 0.2rem 0.4rem; border-bottom: 1px solid #e2e8f0;
+    }
+    .resumen-table-wrap td {
+        padding: 0.3rem 0.4rem; color: #1e293b;
+        border-bottom: 1px solid #f1f5f9; font-size: 0.82rem;
+    }
+    .resumen-detail-card {
+        background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+        border: 1px solid #bbf7d0; border-radius: 18px;
+        padding: 1rem 1.1rem; margin: 0.75rem 0;
+    }
+    .resumen-detail-title {
+        font-size: 1rem; font-weight: 700; color: #166534;
+        margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.35rem;
+    }
+    .resumen-detail-row {
+        display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.25rem;
+    }
+    .resumen-detail-label {
+        font-size: 0.78rem; font-weight: 600; color: #64748b; min-width: 100px;
+    }
+    .resumen-detail-value { font-size: 0.9rem; color: #0f172a; font-weight: 500; }
+    .resumen-detail-link { font-size: 0.9rem; color: #2563eb; word-break: break-all; }
+    .resumen-summary-card {
+        background: #ffffff; border: 1px solid #dbeafe; border-radius: 18px;
+        padding: 1rem 1.1rem; margin: 0.75rem 0;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+    }
+    .resumen-summary-title {
+        font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em;
+        color: #2563eb; font-weight: 800; margin-bottom: 0.5rem;
+    }
+    .resumen-summary-text {
+        font-size: 0.94rem; color: #334155; line-height: 1.7; white-space: pre-wrap;
+    }
+    .resumen-summary-meta { font-size: 0.78rem; color: #94a3b8; margin-top: 0.5rem; }
+    .resumen-empty-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border: 1px dashed #cbd5e1; border-radius: 20px;
+        padding: 1rem 1.1rem; margin: 0.75rem 0;
+    }
+    .resumen-parts-card {
+        background: #ffffff; border: 1px solid #e2e8f0; border-radius: 18px;
+        padding: 1rem 1.1rem; margin: 0.75rem 0;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
+    }
+    .resumen-parts-title {
+        font-size: 0.9rem; font-weight: 700; color: #0f172a;
+        margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.35rem;
+    }
+    .resumen-metric-box {
+        background: #f8fafc; border-radius: 14px;
+        padding: 0.6rem 0.8rem; text-align: center;
+    }
+    .resumen-metric-box .num { font-size: 1.3rem; font-weight: 800; color: #0f172a; display: block; }
+    .resumen-metric-box .lbl {
+        font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+        color: #64748b; font-weight: 600;
+    }
+    .resumen-chip-row {
+        display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem;
+    }
+    .resumen-chip {
+        display: inline-flex; align-items: center; padding: 0.25rem 0.6rem;
+        border-radius: 999px; background: #f0fdf4; color: #15803d;
+        border: 1px solid #bbf7d0; font-size: 0.78rem; font-weight: 600;
+    }
+    .resumen-chip-warn {
+        background: #fefce8; color: #a16207; border-color: #fde68a;
+    }
+    .resumen-filter-section {
+        background: #ffffff; border: 1px solid #e2e8f0; border-radius: 22px;
+        padding: 1rem 1.15rem; box-shadow: 0 10px 32px rgba(15, 23, 42, 0.04);
+        margin-bottom: 1rem;
+    }
+    .resumen-filter-copy {
+        font-size: 0.85rem; color: #64748b; margin-bottom: 0.7rem;
+    }
+    .resumen-status-dot {
+        display: inline-block; width: 8px; height: 8px;
+        border-radius: 50%; margin-right: 0.3rem;
+    }
+    .resumen-status-dot.completado { background: #22c55e; }
+    .resumen-status-dot.pendiente  { background: #eab308; }
+    .resumen-status-dot.cancelado  { background: #ef4444; }
+    </style>
+    """, unsafe_allow_html=True)
 
 # -------- Participantes --------
 def view_participantes():
