@@ -6,10 +6,7 @@
         "httpMethod": "POST",
         "path": "resumen-presencial",
         "responseMode": "responseNode",
-        "options": {
-          "binaryData": true,
-          "binaryPropertyName": "data"
-        }
+        "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
@@ -63,6 +60,7 @@
     },
     {
       "parameters": {
+        "operation": "pdf",
         "binaryPropertyName": "data",
         "options": {}
       },

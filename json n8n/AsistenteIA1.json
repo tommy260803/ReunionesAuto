@@ -7,7 +7,7 @@
         "path": "crear-reunion-chat",
         "responseMode": "responseNode",
         "options": {
-          "rawBody": "={\n  \"creador_id\": \"UUID-de-usuarios.id\",\n  \"mensaje\": \"Programa una reunión mañana a las 11am por 60 minutos con asunto Ventas Q4 e invita a pro o superior y a ana@empresa.com\"\n}\n"
+          "rawBody": "={\n  \"creador_id\": \"UUID-de-usuarios.id\",\n  \"creador_correo\": \"organizador@empresa.com\",\n  \"borrador\": {\n    \"tema\": \"Planificación\",\n    \"fecha_inicio\": \"2026-07-14T10:00:00-05:00\",\n    \"duracion_minutos\": 60,\n    \"tipo\": \"virtual\",\n    \"direccion\": null,\n    \"correos\": [\"equipo@empresa.com\"]\n  }\n}\n"
         }
       },
       "type": "n8n-nodes-base.webhook",
@@ -22,38 +22,7 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "https://api.groq.com/openai/v1/chat/completions",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-              {
-                "name": "Authorization",
-                "value": "=Bearer TU_GROQ_API_KEY_AQUI"
-              },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Eres un asistente que convierte solicitudes de reuniones en JSON estricto.\\n\\nHOY es {{ $now.format('yyyy-MM-dd') }} ({{ $now.format('EEEE') }}).\\nLa hora actual en America/Lima es {{ $now.setZone('America/Lima').format('HH:mm') }}.\\n\\nDevuelve SOLO JSON v\\u00e1lido, sin texto adicional.\\n\\nFormato esperado:\\n{\\n \\\"asunto\\\": string,\\n \\\"fecha_iso\\\": string (ISO 8601 en America/Lima),\\n \\\"duracion_minutos\\\": number,\\n \\\"correos\\\": string[],\\n \\\"nivel_minimo\\\": \\\"basico\\\" | \\\"pro\\\" | \\\"enterprise\\\" | null,\\n \\\"solo_este_nivel\\\": boolean\\n}\\n\\nREGLAS ESTRICTAS (son ORDENES, no sugerencias):\\n1. La hora la debes calcular DIRECTAMENTE en America/Lima. NO conviertas desde UTC.\\n2. Ejemplo: 4 pm en Lima es 16:00. El ISO ser\\u00eda \\\"HOY T16:00:00-05:00\\\".\\n3. 9 am en Lima es 09:00. El ISO ser\\u00eda \\\"HOY T09:00:00-05:00\\\".\\n4. USA la fecha HOY que te indique arriba.\\n5. Si el usuario dice \\\"ma\\u00f1ana\\\", suma 1 d\\u00eda a HOY.\\n6. Si dice \\\"el lunes\\\" etc., calcula la pr\\u00f3xima ocurrencia desde HOY.\\n7. Si no hay hora, asume 11:00.\\n8. Si no hay duraci\\u00f3n, usa 60.\\n9. Si no indica correos, devuelve [].\\n10. El offset SIEMPRE es -05:00.\\n11. NUNCA a\\u00f1adas explicaciones fuera del JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify($json.body.mensaje) }}\n    }\n  ],\n  \"response_format\": { \"type\": \"json_object\" }\n}\n",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -384,
-        -64
-      ],
-      "id": "1397d94c-449f-4b05-a961-1e75becc70ae",
-      "name": "Groq API"
-    },
-    {
-      "parameters": {
-        "jsCode": "\nconst creador = $('Webhook').first().json.body.creador_id;\nconst groqResponse = $input.first().json;\nconst content = groqResponse.choices[0].message.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\n\nif (!creador) throw new Error(\"Falta creador_id\");\n\nreturn [{\n  json: {\n    creador_id: creador,\n    asunto: parsed.asunto,\n    fecha_iso: parsed.fecha_iso,\n    duracion_minutos: parsed.duracion_minutos,\n    correos: parsed.correos,\n    nivel_minimo: parsed.nivel_minimo,\n    solo_este_nivel: parsed.solo_este_nivel === true\n  }\n}];"
+        "jsCode": "\nconst body = $('Webhook').first().json.body;\nconst borrador = body.borrador;\n\nif (!body.creador_id || !body.creador_correo || !borrador) {\n  throw new Error(\"Faltan datos del creador o borrador para confirmar la reunión\");\n}\n\nreturn [{\n  json: {\n    creador_id: body.creador_id,\n    creador_correo: body.creador_correo.trim().toLowerCase(),\n    asunto: borrador.tema,\n    fecha_iso: borrador.fecha_inicio,\n    duracion_minutos: Number(borrador.duracion_minutos) || 60,\n    correos: Array.isArray(borrador.correos) ? borrador.correos : [],\n    nivel_minimo: null,\n    solo_este_nivel: false,\n    tipo: borrador.tipo || 'virtual',\n    direccion: borrador.direccion || null\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -67,7 +36,7 @@
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"meeting\": {\n    \"tema\": \"{{ $('Insertar reunión en Supabase').item.json.tema }}\",\n    \"fecha\": \"{{ $('Insertar reunión en Supabase').item.json.fecha_inicio ? $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(8,10) + '/' + $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(5,7) + '/' + $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(0,4) : '' }}\",\n    \"hora\": \"{{ $('Insertar reunión en Supabase').item.json.fecha_inicio ? $('Insertar reunión en Supabase').item.json.fecha_inicio.substring(11,16) : '' }}\",\n    \"duracion\": {{ $('Insertar reunión en Supabase').item.json.duracion_minutos || 60 }},\n    \"join_url\": \"{{ $('Create a meeting').item.json.join_url }}\",\n    \"tipo\": \"virtual\"\n  },\n  \"destinatarios\": {{ JSON.stringify($('Code in JavaScript1').item.json.invitados_finales) }}\n}\n",
+        "responseBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
@@ -185,7 +154,8 @@
         -320
       ],
       "id": "851104d9-b72c-4571-8d91-b3eef7d50f9a",
-      "name": "Supabase query EQ nivel exacto"
+        "name": "Supabase query EQ nivel exacto",
+        "alwaysOutputData": true
     },
     {
       "parameters": {
@@ -225,11 +195,12 @@
         -80
       ],
       "id": "9304e694-62d9-4f79-9eee-5e72064cd4ba",
-      "name": "Supabase query IN niveles superiores"
+        "name": "Supabase query IN niveles superiores",
+        "alwaysOutputData": true
     },
     {
       "parameters": {
-        "jsCode": "const correos = $('Code in JavaScript').first().json.correos || [];\n\nif (!Array.isArray(correos) || correos.length === 0) {\n  return [];\n}\n\nreturn correos.map(correo => ({\n  json: {\n    correo: correo.trim().toLowerCase(),\n    id: null\n  }\n}));"
+        "jsCode": "const correos = $('Code in JavaScript').first().json.correos || [];\n\n// Siempre emitir al menos un item para que Merge no detenga el workflow.\nif (!Array.isArray(correos) || correos.length === 0) {\n  return [{ json: {} }];\n}\n\nreturn correos.map(correo => ({\n  json: {\n    correo: correo.trim().toLowerCase(),\n    id: null,\n    rol: 'participante'\n  }\n}));"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -241,7 +212,9 @@
       "name": "Supabase por correos mencionados"
     },
     {
-      "parameters": {},
+      "parameters": {
+        "mode": "append"
+      },
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
@@ -253,7 +226,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.all().flatMap(i => i.json);\n\n// Convertir todo a lista de {correo, usuario_id}\nconst inviteList = data\n  .filter(i => i?.correo)\n  .map(i => ({\n    correo: i.correo.trim().toLowerCase(),\n    usuario_id: i.id || null   // <-- IMPORTANTE: aquí tomamos el ID si existe\n  }));\n\n// Eliminar duplicados por correo\nconst unique = [];\nconst seen = new Set();\n\nfor (const item of inviteList) {\n  if (!seen.has(item.correo)) {\n    seen.add(item.correo);\n    unique.push(item);\n  }\n}\n\n// Salida final en UN solo item\nreturn [{\n  json: {\n    invitados_finales: unique\n  }\n}];\n"
+        "jsCode": "const request = $('Code in JavaScript').first().json;\nconst recipients = new Map();\n\nconst addRecipient = (correo, usuarioId, rol = 'participante') => {\n  if (!correo) return;\n  const key = correo.trim().toLowerCase();\n  const existing = recipients.get(key);\n  recipients.set(key, {\n    correo: key,\n    usuario_id: usuarioId || existing?.usuario_id || null,\n    rol: rol === 'organizador' ? 'organizador' : (existing?.rol || 'participante')\n  });\n};\n\n// El creador siempre queda registrado, incluso si no hay invitados externos.\naddRecipient(request.creador_correo, request.creador_id, 'organizador');\n\nfor (const item of $input.all().map(i => i.json)) {\n  addRecipient(item?.correo, item?.id || item?.usuario_id, item?.rol || 'participante');\n}\n\nreturn [{ json: { invitados_finales: [...recipients.values()] } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -291,7 +264,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/reuniones",
+        "url": "https://xbqonynkvjtnnovfgudi.supabase.co/rest/v1/rpc/crear_reunion_con_participantes",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -310,12 +283,16 @@
             {
               "name": "Prefer",
               "value": "=return=representation"
+            },
+            {
+              "name": "Accept",
+              "value": "application/vnd.pgrst.object+json"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"creador_id\": \"{{$node['Code in JavaScript'].json.creador_id}}\",\n  \"tema\": \"{{$node['Code in JavaScript'].json.asunto}}\",\n  \"fecha_inicio\": \"{{$node['Code in JavaScript'].json.fecha_iso}}\",\n  \"duracion_minutos\": {{ $node['Code in JavaScript'].json.duracion_minutos ? parseInt($node['Code in JavaScript'].json.duracion_minutos) : 60 }},\n  \"proveedor\": \"zoom\",\n  \"id_externo\": \"{{ $node['Create a meeting'].json.id ? $node['Create a meeting'].json.id : '' }}\",\n  \"join_url\": \"{{ $node['Create a meeting'].json.join_url ? $node['Create a meeting'].json.join_url : '' }}\",\n  \"start_url\": \"{{ $node['Create a meeting'].json.start_url ? $node['Create a meeting'].json.start_url : '' }}\",\n  \"estado\": \"programada\"\n}\n",
+        "jsonBody": "={{ JSON.stringify({ p_reunion: { creador_id: $('Code in JavaScript').item.json.creador_id, tema: $('Code in JavaScript').item.json.asunto, fecha_inicio: $('Code in JavaScript').item.json.fecha_iso, duracion_minutos: Number($('Code in JavaScript').item.json.duracion_minutos) || 60, proveedor: 'zoom', id_externo: $('Create a meeting').item.json.id || '', join_url: $('Create a meeting').item.json.join_url || '', start_url: $('Create a meeting').item.json.start_url || '', estado: 'programada', tipo: $('Code in JavaScript').item.json.tipo || 'virtual', direccion: $('Code in JavaScript').item.json.direccion || '' }, p_participantes: $('Code in JavaScript1').item.json.invitados_finales }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -326,6 +303,19 @@
       ],
       "id": "d156d3aa-f52d-4e1b-b279-805501884087",
       "name": "Insertar reunión en Supabase"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawResponse = $input.first().json;\nconst draft = $('Code in JavaScript').first().json;\nconst zoom = $('Create a meeting').first().json;\nconst recipients = $('Code in JavaScript1').first().json.invitados_finales || [];\n\n// PostgREST puede devolver el registro directamente, dentro de data/body o como array.\nconst findMeeting = (value) => {\n  if (Array.isArray(value)) return value.map(findMeeting).find(Boolean) || null;\n  if (!value || typeof value !== 'object') return null;\n  if (value.id || value.tema || value.fecha_inicio) return value;\n  for (const nested of Object.values(value)) {\n    const found = findMeeting(nested);\n    if (found) return found;\n  }\n  return null;\n};\n\nconst persisted = findMeeting(rawResponse) || {};\n\nreturn [{\n  json: {\n    estado: 'confirmada',\n    respuesta: 'Reunión creada correctamente.',\n    meeting: {\n      id: persisted.id || null,\n      tema: persisted.tema || draft.asunto,\n      fecha_inicio: persisted.fecha_inicio || draft.fecha_iso,\n      duracion_minutos: Number(persisted.duracion_minutos || draft.duracion_minutos || 60),\n      tipo: persisted.tipo || draft.tipo || 'virtual',\n      direccion: persisted.direccion || draft.direccion || null,\n      join_url: zoom.join_url || persisted.join_url || ''\n    },\n    destinatarios: recipients\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        -16
+      ],
+      "id": "45c0c264-9b5a-4e29-b9d3-1a2f3c73b74c",
+      "name": "Preparar respuesta confirmada"
     },
     {
       "parameters": {
@@ -355,7 +345,7 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={\n  \"reunion_id\": \"{{ $('Insertar reunión en Supabase').item.json.id }}\",\n  \"correo\": \"{{$json.correo}}\",\n  \"usuario_id\": {{ $json.usuario_id || null }},\n  \"rol\": \"participante\",\n  \"estado_invitacion\": \"enviado\"\n}\n",
+        "body": "={{ JSON.stringify({ reunion_id: $('Insertar reunión en Supabase').item.json.id, correo: $json.correo, usuario_id: $json.usuario_id || null, rol: $json.rol || 'participante', estado_invitacion: 'enviado' }) }}",
         "options": {
           "batching": {
             "batch": {
@@ -377,7 +367,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const invitados = $('Code in JavaScript1').first().json.invitados_finales;\n\nif (!Array.isArray(invitados)) {\n  throw new Error(\"No se encontró invitados_finales o no es un array\");\n}\n\nreturn invitados.map(inv => ({\n  json: {\n    correo: inv.correo || inv, // soporta ambos formatos\n    usuario_id: inv.usuario_id || null\n  }\n}));\n"
+        "jsCode": "const invitados = $('Code in JavaScript1').first().json.invitados_finales;\n\nif (!Array.isArray(invitados)) {\n  throw new Error(\"No se encontró invitados_finales o no es un array\");\n}\n\n// El organizador ya conoce la reunión; solo se envían correos a invitados externos.\nreturn invitados\n  .filter(inv => inv.rol !== 'organizador')\n  .map(inv => ({ json: { correo: inv.correo } }));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -416,17 +406,6 @@
   "pinData": {},
   "connections": {
     "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Groq API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Groq API": {
       "main": [
         [
           {
@@ -559,7 +538,23 @@
       "main": [
         [
           {
+            "node": "Preparar respuesta confirmada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar respuesta confirmada": {
+      "main": [
+        [
+          {
             "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
             "type": "main",
             "index": 0
           }
@@ -579,20 +574,14 @@
     },
     "Send a message": {
       "main": [
-        [
-          {
-            "node": "Respond to Webhook",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Code in JavaScript2": {
       "main": [
         [
           {
-            "node": "Insertar Participantes",
+            "node": "Send a message",
             "type": "main",
             "index": 0
           }

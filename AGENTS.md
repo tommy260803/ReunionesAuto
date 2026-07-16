@@ -7,9 +7,9 @@
 - **Charts**: Altair (donuts, bars, lines) + Plotly Express (metrics page).
 
 ## Setup (order matters)
-1. Import n8n JSON → add credentials
-2. Run SQL scripts in Supabase SQL Editor **in this order**: `query1.txt` → `query2.txt` → `query3.txt` → `query4.txt` → `insert_sample_tasks.sql` → `query5_metricas.txt`
-3. Create `.env` with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, 3 n8n webhook URLs
+1. Import `json n8n/AsistenteIA1.json` and `json n8n/BorradorReunionChat.json` → add credentials
+2. Run SQL scripts in Supabase SQL Editor **in this order**: `query1.txt` → `query2.txt` → `query3.txt` → `query4.txt` → `insert_sample_tasks.sql` → `query5_metricas.txt` → `query6_reuniones_participantes.sql`
+3. Create `.env` with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, 4 n8n webhook URLs including `N8N_DRAFT_MEETING_WEBHOOK_URL`
 4. `python -m venv .venv` → `.\.venv\Scripts\Activate` → `pip install -r requirements.txt`
 5. If bcrypt fails on install: `pip uninstall bcrypt -y` → `pip install passlib[bcrypt]` → `pip install "bcrypt==4.0.1"`
 6. `streamlit run app.py`

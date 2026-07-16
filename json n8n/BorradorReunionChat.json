@@ -1,0 +1,69 @@
+{
+  "name": "BorradorReunionChat",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "borrador-reunion-chat",
+        "responseMode": "responseNode"
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-480, 0],
+      "id": "8fd0aed4-a4e2-4246-bb74-a275363f1b0f",
+      "name": "Webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer TU_GROQ_API_KEY_AQUI" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: `Eres un asistente de reuniones. Devuelve SOLO JSON válido, sin texto adicional.\n\nHOY es ${$now.setZone('America/Lima').format('yyyy-MM-dd')} y la zona horaria es America/Lima (-05:00).\n\nDebes crear o actualizar el BORRADOR ACTUAL usando la solicitud del usuario. Conserva los valores no modificados.\nBORRADOR ACTUAL: ${JSON.stringify($json.body.borrador || {})}\n\nFormato obligatorio:\n{\"tema\": string, \"fecha_inicio\": string ISO 8601 con -05:00, \"duracion_minutos\": number, \"correos\": string[], \"tipo\": \"virtual\"|\"presencial\"|\"mixta\", \"direccion\": string|null, \"campos_modificados\": (\"tema\"|\"fecha_inicio\"|\"duracion_minutos\"|\"correos\"|\"tipo\"|\"direccion\")[]}\n\nReglas: marca en campos_modificados solamente lo que el usuario pidió cambiar. Si solo cambia fecha u hora, NO marques ni alteres correos. Para invitados indica correos solo cuando el usuario mencione, agregue, reemplace o elimine invitados. El código posterior preservará correos si la instrucción no los menciona. Por defecto el tipo es virtual; dirección solo aplica para presencial o mixta.` }, { role: 'user', content: $json.body.mensaje }], response_format: { type: 'json_object' } }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-240, 0],
+      "id": "dce8d319-a2ce-49ca-ba92-2f3af6a02b35",
+      "name": "Groq API"
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $input.first().json.choices?.[0]?.message?.content;\nconst parsed = typeof content === 'string' ? JSON.parse(content) : content;\nconst previous = $('Webhook').first().json.body.borrador || {};\nconst message = String($('Webhook').first().json.body.mensaje || '').toLowerCase();\nconst changed = new Set(Array.isArray(parsed.campos_modificados) ? parsed.campos_modificados : []);\nconst normalizeEmails = (items) => [...new Set((items || []).filter(correo => typeof correo === 'string' && correo.includes('@')).map(correo => correo.trim().toLowerCase()))];\nconst previousEmails = normalizeEmails(previous.correos);\nconst requestedEmails = normalizeEmails(parsed.correos);\nconst mentionedEmails = normalizeEmails(message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi));\nconst hasInviteIntent = /(invita|agrega|añade|anade|participante|invitado|correo|email)/.test(message);\nconst clearInviteIntent = /(sin\\s+(invitados?|participantes?)|elimina(r)?\\s+todos\\s+los\\s+(invitados?|participantes?))/ .test(message);\nconst removeInviteIntent = /(elimina|quita|borra|remueve)/.test(message) && hasInviteIntent;\nconst replaceInviteIntent = /(reemplaza|sustituye|cambia\\s+(los\\s+)?(invitados?|participantes?)|solo\\s+invita)/.test(message);\nlet correos = previousEmails;\nif (clearInviteIntent) {\n  correos = [];\n} else if (removeInviteIntent && mentionedEmails.length) {\n  correos = previousEmails.filter(correo => !mentionedEmails.includes(correo));\n} else if (hasInviteIntent && (mentionedEmails.length || requestedEmails.length)) {\n  const incoming = mentionedEmails.length ? mentionedEmails : requestedEmails;\n  correos = replaceInviteIntent ? incoming : normalizeEmails([...previousEmails, ...incoming]);\n}\n\nconst choose = (field, fallback) => {\n  if (!previous[field] || changed.has(field)) return parsed[field] ?? fallback;\n  return previous[field];\n};\nconst meeting = {\n  tema: choose('tema', 'Reunión sin tema'),\n  fecha_inicio: choose('fecha_inicio', null),\n  duracion_minutos: Number(choose('duracion_minutos', 60)) || 60,\n  tipo: ['virtual', 'presencial', 'mixta'].includes(choose('tipo', 'virtual')) ? choose('tipo', 'virtual') : 'virtual',\n  direccion: changed.has('direccion') ? (parsed.direccion || null) : (previous.direccion || null),\n  correos\n};\n\nif (!meeting.fecha_inicio) throw new Error('No se pudo determinar la fecha de la reunión');\n\nreturn [{\n  json: {\n    estado: 'borrador',\n    respuesta: 'Borrador actualizado. Confírmalo cuando esté listo.',\n    meeting,\n    destinatarios: correos.map(correo => ({ correo, rol: 'participante' }))\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "id": "37e0d25c-bbc3-4a4e-8e61-f563c8fe2f1d",
+      "name": "Normalizar borrador"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [240, 0],
+      "id": "2a7117d8-17a8-4f8a-9662-4dd66bf482f4",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Groq API", "type": "main", "index": 0 }]] },
+    "Groq API": { "main": [[{ "node": "Normalizar borrador", "type": "main", "index": 0 }]] },
+    "Normalizar borrador": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "7cbd48b1-5b06-4215-a543-fefefe9187ef",
+  "meta": { "templateCredsSetupCompleted": true }
+}
