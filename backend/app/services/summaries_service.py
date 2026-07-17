@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -45,6 +46,7 @@ ALLOWED_AUDIO_TYPES = {
     "video/ogg",
 }
 MAX_UPLOAD_SIZE = 200 * 1024 * 1024  # 200 MB
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 
 
 # ------------------------------------------------------------------
@@ -335,18 +337,44 @@ def save_summary_and_tasks(
     else:
         sb.insert("resumenes_detalle", [{"reunion_id": reunion_id, **detail}])
 
-    # Crear tareas
+    # Crear tareas. Los LLM pueden devolver nombres como responsable o
+    # fechas relativas ("el viernes"), mientras que la tabla acepta email y
+    # fecha ISO. Conservamos la tarea y vaciamos esos valores no verificables.
     for task in payload.get("tareas", []):
-        if not task.get("descripcion"):
+        description = str(task.get("descripcion") or "").strip()
+        if not description:
             continue
+
+        responsible = str(task.get("responsable") or "").strip()
+        email = responsible if EMAIL_RE.match(responsible) else None
+
+        due_date = str(task.get("fecha_vencimiento") or "").strip()
+        try:
+            due_date = date.fromisoformat(due_date).isoformat() if due_date else None
+        except ValueError:
+            due_date = None
+
+        # A retry of the callback must not create the same task twice.
+        existing_task = sb.select(
+            "tareas",
+            {
+                "select": "id",
+                "reunion_id": f"eq.{reunion_id}",
+                "descripcion": f"eq.{description}",
+                "limit": "1",
+            },
+        )
+        if existing_task:
+            continue
+
         sb.insert(
             "tareas",
             [{
                 "reunion_id": reunion_id,
-                "descripcion": task["descripcion"],
-                "asignado_a_correo": task.get("responsable") or None,
+                "descripcion": description,
+                "asignado_a_correo": email,
                 "estado": "pendiente",
-                "fecha_vencimiento": task.get("fecha_vencimiento") or None,
+                "fecha_vencimiento": due_date,
             }],
         )
 

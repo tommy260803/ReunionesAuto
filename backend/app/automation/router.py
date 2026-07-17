@@ -207,7 +207,11 @@ async def create_summary_from_recording(
     # Evitar trabajos concurrentes en la misma reunión
     existing = summaries.get_active_job_for_meeting(sb, reunion_id)
     if existing and existing.get("estado") not in ("finalizado", "error", "cancelado"):
-        return SummaryJobStatus(**existing)
+        # A manual upload is an explicit replacement of the prior recording.
+        summaries.update_job(sb, existing["id"], {
+            "estado": "cancelado",
+            "error_detalle": "Reemplazado por una nueva grabación manual.",
+        })
 
     try:
         content = await file.read()
@@ -251,7 +255,10 @@ async def create_summary_from_zoom(
 
     existing = summaries.get_active_job_for_meeting(sb, body.reunion_id)
     if existing and existing.get("estado") not in ("finalizado", "error", "cancelado"):
-        return SummaryJobStatus(**existing)
+        summaries.update_job(sb, existing["id"], {
+            "estado": "cancelado",
+            "error_detalle": "Reemplazado por una nueva solicitud de Zoom.",
+        })
 
     try:
         # 1. Recuperar la reunión para obtener el id_externo (zoom meeting id)
@@ -329,6 +336,29 @@ async def get_summary_job_status(
 
 
 @router.post(
+    "/summary/job/{job_id}/cancel",
+    summary="Cancelar un trabajo de resumen en curso",
+)
+async def cancel_summary_job(
+    job_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Cancela un trabajo atascado o iniciado por error para permitir reintentar."""
+    sb = get_supabase(service_role=True)
+    job = summaries.get_job(sb, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Trabajo no encontrado")
+    if job.get("estado") == "finalizado":
+        raise HTTPException(status_code=409, detail="No se puede cancelar un trabajo finalizado")
+
+    summaries.update_job(sb, job_id, {
+        "estado": "cancelado",
+        "error_detalle": "Cancelado por el usuario.",
+    })
+    return {"message": "Proceso cancelado. Ya puedes subir otra grabación."}
+
+
+@router.post(
     "/summary/callback",
     summary="Callback de n8n para entregar resumen y tareas",
     status_code=status.HTTP_200_OK,
@@ -350,6 +380,8 @@ async def summary_callback(
 
     if job.get("estado") == "finalizado":
         return {"message": "El trabajo ya fue finalizado"}
+    if job.get("estado") == "cancelado":
+        return {"message": "El trabajo fue cancelado; se ignoró el callback tardío"}
 
     if payload.estado == "error":
         summaries.update_job(sb, job["id"], {

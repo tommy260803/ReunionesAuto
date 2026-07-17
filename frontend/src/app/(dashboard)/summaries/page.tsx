@@ -18,6 +18,7 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
+  CircleStop,
   RefreshCw,
   ListTodo,
 } from "lucide-react";
@@ -206,6 +207,20 @@ export default function SummariesPage() {
       setError(err.response?.data?.detail || t("summaries.generateError"));
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    if (!job) return;
+    try {
+      await api.post(`/automation/summary/job/${job.id}/cancel`);
+      stopPolling();
+      setJob(null);
+      setGenerating(false);
+      setError("");
+      setSuccessMsg(t("summaries.cancelled"));
+    } catch (err: any) {
+      setError(err.response?.data?.detail || t("summaries.cancelError"));
     }
   };
 
@@ -464,6 +479,15 @@ export default function SummariesPage() {
               <span className="text-slate-400">|</span>
               <span className="text-slate-500">{t("summaries.sourceLabel")}:</span>
               <span className="font-medium text-slate-700">{sourceLabel(job.fuente)}</span>
+              {!TERMINAL_STATES.includes(job.estado) && (
+                <button
+                  onClick={handleCancelJob}
+                  className="ml-2 inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                >
+                  <CircleStop className="h-3.5 w-3.5" />
+                  {t("summaries.cancelProcess")}
+                </button>
+              )}
             </div>
           )}
         </div>

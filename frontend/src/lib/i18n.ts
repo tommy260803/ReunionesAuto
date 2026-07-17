@@ -283,6 +283,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "summaries.proximosPasos": "Próximos pasos",
     "summaries.tareasCreadas": "Tareas creadas",
     "summaries.errorDetail": "Detalle del error",
+    "summaries.cancelProcess": "Cancelar proceso",
+    "summaries.cancelled": "Proceso cancelado. Ya puedes subir otra grabación.",
+    "summaries.cancelError": "No se pudo cancelar el proceso.",
 
     "chat.undefinedDate": "Por definir",
     "chat.invalidDraft": "El asistente no devolvió un borrador válido.",
@@ -593,6 +596,9 @@ export const translations: Record<Language, Record<string, string>> = {
     "summaries.proximosPasos": "Next steps",
     "summaries.tareasCreadas": "Tasks created",
     "summaries.errorDetail": "Error detail",
+    "summaries.cancelProcess": "Cancel process",
+    "summaries.cancelled": "Process cancelled. You can upload another recording.",
+    "summaries.cancelError": "Could not cancel the process.",
 
     "chat.undefinedDate": "To be defined",
     "chat.invalidDraft": "The assistant did not return a valid draft.",
