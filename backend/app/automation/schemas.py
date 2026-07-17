@@ -28,3 +28,29 @@ class ChatRequest(BaseModel):
     mensaje: str = ""
     accion: Literal["borrador", "confirmar", "cancelar"] = "borrador"
     borrador: Optional[MeetingDraft] = None
+
+
+class SummaryCallbackPayload(BaseModel):
+    job_id: str
+    estado: Literal["finalizado", "error"] = "finalizado"
+    resumen: Optional[str] = None
+    resumen_ejecutivo: Optional[str] = None
+    decisiones: Optional[str] = None
+    riesgos: Optional[str] = None
+    proximos_pasos: Optional[str] = None
+    tareas: list[dict] = []
+    error_detalle: Optional[str] = None
+
+
+class ZoomRecordingRequest(BaseModel):
+    reunion_id: str
+
+
+class SummaryJobStatus(BaseModel):
+    id: str
+    reunion_id: str
+    estado: str
+    fuente: str
+    resumen_texto: Optional[str] = None
+    error_detalle: Optional[str] = None
+    fecha_actualizacion: Optional[str] = None
