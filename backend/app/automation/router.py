@@ -348,6 +348,9 @@ async def summary_callback(
     if not job:
         raise HTTPException(status_code=404, detail="Trabajo no encontrado")
 
+    if job.get("estado") == "finalizado":
+        return {"message": "El trabajo ya fue finalizado"}
+
     if payload.estado == "error":
         summaries.update_job(sb, job["id"], {
             "estado": "error",

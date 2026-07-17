@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "procesar-resumen",
-        "responseMode": "responseNode",
+        "responseMode": "onReceived",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
@@ -285,17 +285,6 @@
       "retryOnFail": true,
       "maxTries": 6,
       "waitBetweenTries": 10000
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\n  \"status\": \"ok\",\n  \"job_id\": \"{{ $json.job_id }}\"\n}"
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
-      "position": [2160, -200],
-      "id": "p22",
-      "name": "Respond"
     }
   ],
   "connections": {
@@ -357,7 +346,7 @@
       "main": [[{"node": "Callback backend", "type": "main", "index": 0}]]
     },
     "Callback backend": {
-      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+      "main": [[]]
     }
   },
   "active": true,
