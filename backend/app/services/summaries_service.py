@@ -341,42 +341,47 @@ def save_summary_and_tasks(
     # fechas relativas ("el viernes"), mientras que la tabla acepta email y
     # fecha ISO. Conservamos la tarea y vaciamos esos valores no verificables.
     for task in payload.get("tareas", []):
-        description = str(task.get("descripcion") or "").strip()
-        if not description:
-            continue
-
-        responsible = str(task.get("responsable") or "").strip()
-        email = responsible if EMAIL_RE.match(responsible) else None
-
-        due_date = str(task.get("fecha_vencimiento") or "").strip()
         try:
-            due_date = date.fromisoformat(due_date).isoformat() if due_date else None
-        except ValueError:
-            due_date = None
+            description = str(task.get("descripcion") or "").strip()
+            if not description:
+                continue
 
-        # A retry of the callback must not create the same task twice.
-        existing_task = sb.select(
-            "tareas",
-            {
-                "select": "id",
-                "reunion_id": f"eq.{reunion_id}",
-                "descripcion": f"eq.{description}",
-                "limit": "1",
-            },
-        )
-        if existing_task:
+            responsible = str(task.get("responsable") or "").strip()
+            email = responsible if EMAIL_RE.match(responsible) else None
+
+            due_date = str(task.get("fecha_vencimiento") or "").strip()
+            try:
+                due_date = date.fromisoformat(due_date).isoformat() if due_date else None
+            except ValueError:
+                due_date = None
+
+            # A retry of the callback must not create the same task twice.
+            existing_task = sb.select(
+                "tareas",
+                {
+                    "select": "id",
+                    "reunion_id": f"eq.{reunion_id}",
+                    "descripcion": f"eq.{description}",
+                    "limit": "1",
+                },
+            )
+            if existing_task:
+                continue
+
+            sb.insert(
+                "tareas",
+                [{
+                    "reunion_id": reunion_id,
+                    "descripcion": description,
+                    "asignado_a_correo": email,
+                    "estado": "pendiente",
+                    "fecha_vencimiento": due_date,
+                }],
+            )
+        except Exception:
+            # A malformed AI task must not invalidate an otherwise complete
+            # summary. The user can create the task manually from the panel.
             continue
-
-        sb.insert(
-            "tareas",
-            [{
-                "reunion_id": reunion_id,
-                "descripcion": description,
-                "asignado_a_correo": email,
-                "estado": "pendiente",
-                "fecha_vencimiento": due_date,
-            }],
-        )
 
     # Actualizar trabajo
     update_job(

@@ -286,6 +286,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "summaries.cancelProcess": "Cancelar proceso",
     "summaries.cancelled": "Proceso cancelado. Ya puedes subir otra grabación.",
     "summaries.cancelError": "No se pudo cancelar el proceso.",
+    "summaries.replaceRecording": "Subir otra grabación",
 
     "chat.undefinedDate": "Por definir",
     "chat.invalidDraft": "El asistente no devolvió un borrador válido.",
@@ -599,6 +600,7 @@ export const translations: Record<Language, Record<string, string>> = {
     "summaries.cancelProcess": "Cancel process",
     "summaries.cancelled": "Process cancelled. You can upload another recording.",
     "summaries.cancelError": "Could not cancel the process.",
+    "summaries.replaceRecording": "Upload another recording",
 
     "chat.undefinedDate": "To be defined",
     "chat.invalidDraft": "The assistant did not return a valid draft.",

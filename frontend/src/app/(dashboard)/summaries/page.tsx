@@ -117,6 +117,11 @@ export default function SummariesPage() {
   }, [selectedMeetingId]);
 
   useEffect(() => {
+    if (summary) {
+      stopPolling();
+      setGenerating(false);
+      return;
+    }
     if (job && !TERMINAL_STATES.includes(job.estado)) {
       startPolling(job.reunion_id);
     } else if (job?.estado === "finalizado") {
@@ -130,7 +135,7 @@ export default function SummariesPage() {
       setSuccessMsg("");
       setError(job.error_detalle || t("summaries.generateError"));
     }
-  }, [job?.id, job?.estado]);
+  }, [job?.id, job?.estado, summary?.id]);
 
   const fetchMeetings = async () => {
     try {
@@ -151,6 +156,8 @@ export default function SummariesPage() {
     try {
       const { data } = await api.get<Summary>(`/summaries/meeting/${meetingId}`);
       setSummary(data);
+      stopPolling();
+      setGenerating(false);
       try {
         const detail = await api.get<SummaryDetail>(`/summaries/meeting/${meetingId}/detail`);
         setSummaryDetail(detail.data);
@@ -379,6 +386,7 @@ export default function SummariesPage() {
   };
 
   const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
+  const displayedJob = summary && job ? { ...job, estado: "finalizado", error_detalle: undefined } : job;
   const meetingGroups = [
     { type: "virtual", label: t("summaries.virtualMeetings"), color: "text-blue-600" },
     { type: "presencial", label: t("summaries.inPersonMeetings"), color: "text-orange-600" },
@@ -459,27 +467,27 @@ export default function SummariesPage() {
             <FileText className="w-5 h-5 text-brand-500" />
             {t("summaries.summaryTitle")}
           </h3>
-          {job && (
+          {displayedJob && (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-500">{t("summaries.statusLabel")}:</span>
               <span
                 className={`font-medium flex items-center gap-1 ${
-                  job.estado === "error"
+                  displayedJob.estado === "error"
                     ? "text-red-600"
-                    : job.estado === "finalizado"
+                    : displayedJob.estado === "finalizado"
                     ? "text-emerald-600"
                     : "text-blue-600"
                 }`}
               >
-                {job.estado === "error" && <XCircle className="w-4 h-4" />}
-                {job.estado === "finalizado" && <CheckCircle className="w-4 h-4" />}
-                {!["error", "finalizado"].includes(job.estado) && <Loader2 className="w-4 h-4 animate-spin" />}
-                {statusLabel(job.estado)}
+                {displayedJob.estado === "error" && <XCircle className="w-4 h-4" />}
+                {displayedJob.estado === "finalizado" && <CheckCircle className="w-4 h-4" />}
+                {!["error", "finalizado"].includes(displayedJob.estado) && <Loader2 className="w-4 h-4 animate-spin" />}
+                {statusLabel(displayedJob.estado)}
               </span>
               <span className="text-slate-400">|</span>
               <span className="text-slate-500">{t("summaries.sourceLabel")}:</span>
-              <span className="font-medium text-slate-700">{sourceLabel(job.fuente)}</span>
-              {!TERMINAL_STATES.includes(job.estado) && (
+              <span className="font-medium text-slate-700">{sourceLabel(displayedJob.fuente)}</span>
+              {!TERMINAL_STATES.includes(displayedJob.estado) && (
                 <button
                   onClick={handleCancelJob}
                   className="ml-2 inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
@@ -493,6 +501,7 @@ export default function SummariesPage() {
         </div>
 
         <div className="p-6 flex-1 flex flex-col">
+          <input type="file" accept={AUDIO_EXTENSIONS.join(",")} className="hidden" ref={audioInputRef} onChange={handleAudioUpload} />
           {loadingSummary ? (
             <div className="flex-1 flex items-center justify-center">
               <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
@@ -536,6 +545,16 @@ export default function SummariesPage() {
               <p className="text-xs text-slate-400 text-right">
                 {t("summaries.generatedAt")}: {summary.fecha_creacion ? format(parseISO(summary.fecha_creacion), "dd MMM, yyyy HH:mm", { locale: language === "es" ? es : enUS }) : "—"}
               </p>
+              {selectedMeeting?.tipo !== "presencial" && (
+                <button
+                  onClick={() => audioInputRef.current?.click()}
+                  disabled={generating}
+                  className="self-start btn-primary inline-flex items-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
+                >
+                  <Headphones className="w-4 h-4" />
+                  {t("summaries.replaceRecording")}
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center space-y-5 py-8">
@@ -588,8 +607,6 @@ export default function SummariesPage() {
                       {generating && activeMode === "manual" ? t("summaries.statusSubiendo") : t("summaries.uploadRecording")}
                     </button>
                   </div>
-                  <input type="file" accept={AUDIO_EXTENSIONS.join(",")} className="hidden" ref={audioInputRef} onChange={handleAudioUpload} />
-
                   <div className="text-xs text-slate-400">{t("summaries.processingTranscript")}</div>
                 </>
               )}
