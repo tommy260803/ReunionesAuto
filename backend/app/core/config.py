@@ -7,6 +7,7 @@ para JWT, algoritmos y tiempos de expiración.
 """
 
 from pathlib import Path
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 # Ruta al .env en la raíz del proyecto (zoom2/.env)
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
     # --- Supabase ---
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
-    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = Field(min_length=1)
 
     # --- Storage ---
     SUPABASE_STORAGE_BUCKET: str = "grabaciones-reuniones"
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL: str = ""
     N8N_CALLBACK_SECRET: str = ""
     N8N_PROCESS_RECORDING_WEBHOOK_URL: str = ""
+    N8N_WORKFLOW_VERSION: str = "unversioned"
     BACKEND_PUBLIC_URL: str = ""
 
     # --- JWT / Seguridad ---

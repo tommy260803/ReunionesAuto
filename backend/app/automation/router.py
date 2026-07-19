@@ -4,10 +4,8 @@ Router de automatización.
 Envuelve las llamadas a los webhooks de n8n y registra las métricas.
 """
 
-import time
 import requests
 from fastapi import APIRouter, Depends, Header, HTTPException, status, UploadFile, File, Form
-from datetime import datetime
 
 from app.automation.schemas import (
     CreateMeetingWebhookRequest,
@@ -18,27 +16,16 @@ from app.automation.schemas import (
     SummaryJobStatus,
 )
 from app.services import summaries_service as summaries
+from app.services.metrics_service import (
+    finalize_async_invocation,
+    finalize_invocation,
+    start_invocation,
+)
 from app.core.dependencies import get_current_user, get_current_admin
 from app.core.supabase_client import SupabaseClient, get_supabase
 from app.core.config import settings
 
 router = APIRouter(prefix="/automation", tags=["Automatización"])
-
-def registrar_metrica(sb: SupabaseClient, endpoint: str, tiempo_respuesta: float, estado: str, codigo_estado: int = None, reunion_id: str = None, tamano_respuesta: int = None, detalles: str = None):
-    try:
-        metrica = {
-            'endpoint': endpoint,
-            'tiempo_respuesta': tiempo_respuesta,
-            'estado': estado,
-            'fecha': datetime.now().isoformat(),
-            'codigo_estado': codigo_estado,
-            'reunion_id': reunion_id,
-            'tamano_respuesta': tamano_respuesta,
-            'detalles': detalles
-        }
-        sb.insert("metricas_n8n", [metrica])
-    except Exception as e:
-        print(f"Error registrando métrica: {e}")
 
 @router.post("/meeting", summary="Crear reunión vía n8n webhook")
 async def create_meeting_webhook(
@@ -62,29 +49,67 @@ async def create_meeting_webhook(
         },
     }
     
-    inicio = time.time()
+    invocation = start_invocation(sb, "crear_reunion")
+    resp = None
+    transport_latency = None
     try:
         resp = requests.post(settings.N8N_CREATE_MEETING_WEBHOOK_URL, json=payload, timeout=90)
-        tiempo_respuesta = time.time() - inicio
-        
-        registrar_metrica(
-            sb=sb,
-            endpoint="crear_reunion",
-            tiempo_respuesta=tiempo_respuesta,
-            estado="éxito" if resp.status_code == 200 else "error",
-            codigo_estado=resp.status_code,
-            tamano_respuesta=len(resp.content) if resp.content else 0
-        )
-        
-        if resp.status_code == 200:
-            return resp.json() if resp.text else {"message": "Webhook ejecutado con éxito"}
-        else:
+        transport_latency = invocation.elapsed()
+        response_size = len(resp.content) if resp.content else 0
+
+        if not 200 <= resp.status_code < 300:
+            finalize_invocation(
+                invocation,
+                "error",
+                status_code=resp.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+                details=resp.text[:1000] or "n8n rechazó la solicitud.",
+            )
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    except requests.exceptions.Timeout:
-        registrar_metrica(sb, "crear_reunion", time.time() - inicio, "timeout")
+
+        if resp.text.strip():
+            try:
+                result = resp.json()
+            except ValueError:
+                detail = f"El webhook n8n devolvió contenido inválido: {resp.text[:200]}"
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=500, detail=detail)
+        else:
+            result = {"message": "Webhook ejecutado con éxito"}
+
+        finalize_invocation(
+            invocation,
+            "success",
+            status_code=resp.status_code,
+            response_size=response_size,
+            transport_latency_seconds=transport_latency,
+        )
+        return result
+    except requests.exceptions.Timeout as exc:
+        finalize_invocation(invocation, "timeout", details=str(exc))
         raise HTTPException(status_code=504, detail="Timeout contactando a n8n")
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as exc:
+        finalize_invocation(invocation, "error", details=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
     except Exception as e:
-        registrar_metrica(sb, "crear_reunion", time.time() - inicio, "error", detalles=str(e))
+        finalize_invocation(
+            invocation,
+            "error",
+            status_code=resp.status_code if resp is not None else None,
+            response_size=len(resp.content) if resp is not None and resp.content else 0,
+            transport_latency_seconds=transport_latency,
+            details=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/summary/virtual", summary="Generar resumen virtual vía n8n webhook")
@@ -96,25 +121,32 @@ async def generate_virtual_summary(
     if not settings.N8N_RESUMEN_VIRTUAL_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="N8N_RESUMEN_VIRTUAL_WEBHOOK_URL no configurado")
     
-    inicio = time.time()
     reunion_id = body.reunion_id
+    invocation = start_invocation(sb, "resumen_virtual", reunion_id=reunion_id)
+    resp = None
+    transport_latency = None
     
     try:
         resp = requests.post(settings.N8N_RESUMEN_VIRTUAL_WEBHOOK_URL, json={"reunion_id": reunion_id}, timeout=120)
-        tiempo_respuesta = time.time() - inicio
-        
-        registrar_metrica(
-            sb=sb,
-            endpoint="resumen_virtual",
-            tiempo_respuesta=tiempo_respuesta,
-            estado="éxito" if resp.status_code == 200 else "error",
-            codigo_estado=resp.status_code,
-            reunion_id=reunion_id,
-            tamano_respuesta=len(resp.content) if resp.content else 0
-        )
-        
-        if resp.status_code == 200:
-            data = resp.json()
+        transport_latency = invocation.elapsed()
+        response_size = len(resp.content) if resp.content else 0
+
+        if 200 <= resp.status_code < 300:
+            try:
+                data = resp.json()
+            except ValueError:
+                data = None
+            if not isinstance(data, dict):
+                detail = "El flujo de n8n no devolvió JSON válido."
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=500, detail=detail)
             resumen_texto = data.get("resumen") or data.get("summary") or ""
             if resumen_texto:
                 # Guardar el resumen en supabase
@@ -122,16 +154,52 @@ async def generate_virtual_summary(
                     "reunion_id": reunion_id,
                     "resumen": resumen_texto
                 }])
+                finalize_invocation(
+                    invocation,
+                    "success",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                )
                 return {"message": "Resumen generado y guardado exitosamente.", "resumen": resumen_texto}
             else:
-                raise HTTPException(status_code=500, detail="El flujo de n8n no devolvió un resumen válido.")
+                detail = "El flujo de n8n no devolvió un resumen válido."
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=500, detail=detail)
         else:
+            finalize_invocation(
+                invocation,
+                "error",
+                status_code=resp.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+                details=resp.text[:1000] or "n8n rechazó la solicitud.",
+            )
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    except requests.exceptions.Timeout:
-        registrar_metrica(sb, "resumen_virtual", time.time() - inicio, "timeout", reunion_id=reunion_id)
+    except requests.exceptions.Timeout as exc:
+        finalize_invocation(invocation, "timeout", details=str(exc))
         raise HTTPException(status_code=504, detail="Timeout contactando a n8n")
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as exc:
+        finalize_invocation(invocation, "error", details=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
     except Exception as e:
-        registrar_metrica(sb, "resumen_virtual", time.time() - inicio, "error", reunion_id=reunion_id, detalles=str(e))
+        finalize_invocation(
+            invocation,
+            "error",
+            status_code=resp.status_code if resp is not None else None,
+            response_size=len(resp.content) if resp is not None and resp.content else 0,
+            transport_latency_seconds=transport_latency,
+            details=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/summary/presencial", summary="Procesar acta en PDF vía n8n webhook")
@@ -143,39 +211,74 @@ async def generate_presencial_summary(
 ):
     """
     Envía un archivo PDF a n8n para su procesamiento OCR.
-    La respuesta no incluye el resumen (es asíncrono). El frontend debe hacer polling.
+    El workflow responde después de guardar el resumen; el frontend puede
+    consultar Supabase después de recibir esta confirmación.
     """
     if not settings.N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL no configurado")
     
-    inicio = time.time()
-    
+    files = {"data": (file.filename, await file.read(), file.content_type)}
+    data_form = {"reunion_id": reunion_id, "nombre_archivo": file.filename}
+    invocation = start_invocation(sb, "resumen_presencial", reunion_id=reunion_id)
+    resp = None
+    transport_latency = None
+
     try:
-        files = {"data": (file.filename, await file.read(), file.content_type)}
-        data_form = {"reunion_id": reunion_id, "nombre_archivo": file.filename}
-        
         resp = requests.post(settings.N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL, files=files, data=data_form, timeout=180)
-        tiempo_respuesta = time.time() - inicio
-        
-        registrar_metrica(
-            sb=sb,
-            endpoint="resumen_presencial",
-            tiempo_respuesta=tiempo_respuesta,
-            estado="en_proceso" if resp.status_code == 200 else "error",
-            codigo_estado=resp.status_code,
-            reunion_id=reunion_id,
-            tamano_respuesta=len(resp.content) if resp.content else 0
-        )
-        
-        if resp.status_code == 200:
-            return {"message": "Procesamiento iniciado. El resumen se guardará asíncronamente."}
+        transport_latency = invocation.elapsed()
+        response_size = len(resp.content) if resp.content else 0
+
+        if 200 <= resp.status_code < 300:
+            try:
+                result = resp.json() if resp.text.strip() else {}
+            except ValueError:
+                result = None
+            if not isinstance(result, dict) or result.get("success") is not True:
+                detail = "El flujo presencial no confirmó que el resumen fuera guardado."
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=502, detail=detail)
+            finalize_invocation(
+                invocation,
+                "success",
+                status_code=resp.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+            )
+            return {"message": "Resumen presencial procesado y guardado.", **result}
         else:
+            finalize_invocation(
+                invocation,
+                "error",
+                status_code=resp.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+                details=resp.text[:1000] or "n8n rechazó la solicitud.",
+            )
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
-    except requests.exceptions.Timeout:
-        registrar_metrica(sb, "resumen_presencial", time.time() - inicio, "timeout", reunion_id=reunion_id)
+    except requests.exceptions.Timeout as exc:
+        finalize_invocation(invocation, "timeout", details=str(exc))
         raise HTTPException(status_code=504, detail="Timeout contactando a n8n")
+    except HTTPException:
+        raise
+    except requests.exceptions.RequestException as exc:
+        finalize_invocation(invocation, "error", details=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
     except Exception as e:
-        registrar_metrica(sb, "resumen_presencial", time.time() - inicio, "error", reunion_id=reunion_id, detalles=str(e))
+        finalize_invocation(
+            invocation,
+            "error",
+            status_code=resp.status_code if resp is not None else None,
+            response_size=len(resp.content) if resp is not None and resp.content else 0,
+            transport_latency_seconds=transport_latency,
+            details=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 # ------------------------------------------------------------------
@@ -212,6 +315,12 @@ async def create_summary_from_recording(
             "estado": "cancelado",
             "error_detalle": "Reemplazado por una nueva grabación manual.",
         })
+        finalize_async_invocation(
+            sb,
+            existing["id"],
+            "cancelled",
+            details="Reemplazado por una nueva grabación manual.",
+        )
 
     try:
         content = await file.read()
@@ -227,6 +336,13 @@ async def create_summary_from_recording(
         return SummaryJobStatus(**job)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout contactando a n8n")
+    except requests.exceptions.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else 502
+        raise HTTPException(status_code=status_code, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -259,6 +375,12 @@ async def create_summary_from_zoom(
             "estado": "cancelado",
             "error_detalle": "Reemplazado por una nueva solicitud de Zoom.",
         })
+        finalize_async_invocation(
+            sb,
+            existing["id"],
+            "cancelled",
+            details="Reemplazado por una nueva solicitud de Zoom.",
+        )
 
     try:
         # 1. Recuperar la reunión para obtener el id_externo (zoom meeting id)
@@ -312,6 +434,11 @@ async def create_summary_from_zoom(
 
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="Timeout contactando al servicio externo")
+    except requests.exceptions.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else 502
+        raise HTTPException(status_code=status_code, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -355,6 +482,7 @@ async def cancel_summary_job(
         "estado": "cancelado",
         "error_detalle": "Cancelado por el usuario.",
     })
+    finalize_async_invocation(sb, job_id, "cancelled", details="Cancelado por el usuario.")
     return {"message": "Proceso cancelado. Ya puedes subir otra grabación."}
 
 
@@ -379,8 +507,15 @@ async def summary_callback(
         raise HTTPException(status_code=404, detail="Trabajo no encontrado")
 
     if job.get("estado") == "finalizado":
+        finalize_async_invocation(sb, payload.job_id, "success")
         return {"message": "El trabajo ya fue finalizado"}
     if job.get("estado") == "cancelado":
+        finalize_async_invocation(
+            sb,
+            payload.job_id,
+            "cancelled",
+            details="El trabajo fue cancelado antes de recibir el callback.",
+        )
         return {"message": "El trabajo fue cancelado; se ignoró el callback tardío"}
 
     if payload.estado == "error":
@@ -388,17 +523,28 @@ async def summary_callback(
             "estado": "error",
             "error_detalle": payload.error_detalle or "Error desconocido",
         })
+        finalize_async_invocation(
+            sb,
+            payload.job_id,
+            "error",
+            details=payload.error_detalle or "Error asíncrono informado por n8n.",
+        )
         return {"message": "Estado de error registrado"}
 
     try:
         summaries.save_summary_and_tasks(sb, job, payload.model_dump(exclude_unset=True))
-        return {"message": "Resumen y tareas guardados"}
     except Exception as e:
         summaries.update_job(sb, job["id"], {
             "estado": "error",
             "error_detalle": str(e),
         })
+        finalize_async_invocation(sb, payload.job_id, "error", details=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+    try:
+        finalize_async_invocation(sb, payload.job_id, "success")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="El resumen se guardó, pero la telemetría no pudo finalizarse.") from e
+    return {"message": "Resumen y tareas guardados"}
 
 
 @router.post(
@@ -450,28 +596,51 @@ async def chat_webhook(
             detail="Webhook n8n no configurado para esta acción.",
         )
     
-    inicio = time.time()
+    invocation = start_invocation(sb, metric_endpoint)
+    resp = None
+    transport_latency = None
     try:
         resp = requests.post(webhook_url, json=payload, timeout=90)
-        tiempo_respuesta = time.time() - inicio
-        
-        registrar_metrica(
-            sb=sb,
-            endpoint=metric_endpoint,
-            tiempo_respuesta=tiempo_respuesta,
-            estado="éxito" if resp.status_code == 200 else "error",
-            codigo_estado=resp.status_code,
-            tamano_respuesta=len(resp.content) if resp.content else 0
-        )
-        
-        if resp.status_code == 200:
+        transport_latency = invocation.elapsed()
+        response_size = len(resp.content) if resp.content else 0
+
+        if 200 <= resp.status_code < 300:
             if not resp.text.strip():
-                raise HTTPException(status_code=500, detail="El webhook n8n devolvió una respuesta vacía. Verifica el workflow.")
+                detail = "El webhook n8n devolvió una respuesta vacía. Verifica el workflow."
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=500, detail=detail)
             
             try:
                 data = resp.json()
-            except Exception:
-                raise HTTPException(status_code=500, detail=f"El webhook n8n devolvió contenido inválido: {resp.text[:200]}")
+            except ValueError:
+                detail = f"El webhook n8n devolvió contenido inválido: {resp.text[:200]}"
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=500, detail=detail)
+            if not isinstance(data, dict):
+                detail = "El webhook n8n debe devolver un objeto JSON."
+                finalize_invocation(
+                    invocation,
+                    "error",
+                    status_code=resp.status_code,
+                    response_size=response_size,
+                    transport_latency_seconds=transport_latency,
+                    details=detail,
+                )
+                raise HTTPException(status_code=500, detail=detail)
             
             state = data.get("estado") or ("confirmada" if body.accion == "confirmar" else "borrador")
             meeting = data.get("meeting") or {}
@@ -499,11 +668,39 @@ async def chat_webhook(
                 "meeting": meeting,
                 "destinatarios": recipients,
             }
+            finalize_invocation(
+                invocation,
+                "success",
+                status_code=resp.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+            )
             return response
         else:
+            finalize_invocation(
+                invocation,
+                "error",
+                status_code=resp.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+                details=resp.text[:1000] or "n8n rechazó la solicitud.",
+            )
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    except requests.exceptions.Timeout as exc:
+        finalize_invocation(invocation, "timeout", details=str(exc))
+        raise HTTPException(status_code=504, detail="Timeout contactando a n8n")
     except HTTPException:
         raise
+    except requests.exceptions.RequestException as exc:
+        finalize_invocation(invocation, "error", details=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc))
     except Exception as e:
-        registrar_metrica(sb, metric_endpoint, time.time() - inicio, "error", detalles=str(e))
+        finalize_invocation(
+            invocation,
+            "error",
+            status_code=resp.status_code if resp is not None else None,
+            response_size=len(resp.content) if resp is not None and resp.content else 0,
+            transport_latency_seconds=transport_latency,
+            details=str(e),
+        )
         raise HTTPException(status_code=500, detail=str(e))

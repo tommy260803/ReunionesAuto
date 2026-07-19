@@ -1,39 +1,42 @@
-# AGENTS.md – ReunionesAuto (Zoom2)
+# AGENTS.md - ReunionesAuto (Zoom2)
 
-## Stack
-- **Frontend**: Single-file Streamlit app (`app.py`, ~2780 lines). No framework, no routing lib.
-- **Backend**: Supabase PostgreSQL accessed via **raw `requests`** REST API (`sb_select`, `sb_insert` helpers at `app.py:68-80`). No Supabase SDK.
-- **Automation**: n8n workflows (`json n8n/AsistenteIA1.json`) for Zoom API, AI summaries, PDF OCR.
-- **Charts**: Altair (donuts, bars, lines) + Plotly Express (metrics page).
+## Current Stack
+- Frontend: Next.js 16 App Router, React 19, TypeScript, Tailwind CSS 4 and Recharts in `frontend/`.
+- Backend: FastAPI in `backend/app/` with a raw `requests` Supabase REST client.
+- Database: Supabase PostgreSQL. Versioned SQL scripts live in `querys para supabase/`.
+- Automation: n8n workflows in `json n8n/` for Zoom, meeting creation and AI summaries.
+- Legacy: `app.py` is the former Streamlit implementation and is not the active application.
 
-## Setup (order matters)
-1. Import `json n8n/AsistenteIA1.json` and `json n8n/BorradorReunionChat.json` → add credentials
-2. Run SQL scripts in Supabase SQL Editor **in this order**: `query1.txt` → `query2.txt` → `query3.txt` → `query4.txt` → `insert_sample_tasks.sql` → `query5_metricas.txt` → `query6_reuniones_participantes.sql`
-3. Create `.env` with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, 4 n8n webhook URLs including `N8N_DRAFT_MEETING_WEBHOOK_URL`
-4. `python -m venv .venv` → `.\.venv\Scripts\Activate` → `pip install -r requirements.txt`
-5. If bcrypt fails on install: `pip uninstall bcrypt -y` → `pip install passlib[bcrypt]` → `pip install "bcrypt==4.0.1"`
-6. `streamlit run app.py`
-
-## Key conventions
-- **Admin** is hardcoded at `app.py:108` to `juanaureliodelacruzgamarra@gmail.com`
-- **Supabase REST**: all CRUD goes through `SUPABASE_URL/rest/v1/{table}` with `HEADERS` (apikey + Bearer token). Filters use Supabase query syntax (e.g. `"id": "eq.{value}"`, `"order": "fecha.desc"`).
-- **Chat state reset**: uses `st.session_state["chat_reset_pending"]` flag + `st.rerun()` to clear widgets safely (pattern at `app.py:440-444`).
-- **PDF presencial polling**: after submitting PDF to n8n, polls Supabase `resumenes` table every 3s for up to 120s (`app.py:1301-1332`).
-- **Metric logging**: every n8n call logs to `metricas_n8n` table via `registrar_metrica_n8n()` (`app.py:33-66`).
-- **Password hashing**: uses `passlib.hash.bcrypt` (not bcrypt directly).
-
-## Directories
-- `querys para supabase/` – SQL scripts for schema, data, RLS
-- `json n8n/` – n8n workflow JSON (import into n8n instance)
+## Setup
+1. Run SQL scripts in order: `query1.txt`, `query2.txt`, `query3.txt`, `query4.txt`, `insert_sample_tasks.sql`, `query5_metricas.txt`, `query6_reuniones_participantes.sql`, `query7_resumenes_modulo.sql`, `query8_metricas_inferenciales.sql`.
+2. Import the required workflows from `json n8n/` and configure their credentials.
+3. Configure root `.env`, including `SUPABASE_SERVICE_ROLE_KEY`, n8n webhook URLs, `N8N_CALLBACK_SECRET` and `N8N_WORKFLOW_VERSION`.
+4. Install backend dependencies from `backend/requirements.lock.txt` for a reproducible environment.
+5. Install frontend dependencies with `npm ci` in `frontend/`.
 
 ## Commands
 ```powershell
-.venv\Scripts\Activate
-streamlit run app.py
+# Backend
+backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000 --app-dir backend
+backend\.venv\Scripts\python.exe -m unittest discover -s backend\tests -t backend -v
+
+# Frontend
+npm run dev --prefix frontend
+npm run build --prefix frontend
 ```
 
-## What's missing
-- No test framework, no tests
-- No lint/typecheck config
-- `.env` is committed with live keys (keep in mind)
-- No CI/CD config
+## Statistical Metrics
+- `metricas_n8n` uses one row per invocation and is written with the Supabase service role.
+- Production analysis excludes `legacy`, `demo` and `test` rows.
+- Latency analysis uses successful terminal end-to-end durations from one selected endpoint.
+- The primary latency test is two-sided Welch's t-test.
+- Outcomes use uncorrected Pearson chi-square when every expected cell is at least 5, otherwise two-sided Fisher exact.
+- A non-significant result is not described as stability or equivalence.
+- Do not use `seed_metricas_estadisticas.sql` as empirical article evidence.
+
+## Key Conventions
+- Internal telemetry outcomes are `pending`, `success`, `error`, `timeout` and `cancelled`.
+- Store timestamps in UTC and analyze inclusive calendar dates as half-open UTC intervals.
+- One asynchronous job is correlated through `correlation_id` and finalized by its callback.
+- Admin access is checked by the backend dependency in `backend/app/core/dependencies.py`.
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.

@@ -13,9 +13,7 @@ Gestiona:
 from __future__ import annotations
 
 import base64
-import json
 import re
-import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -26,6 +24,12 @@ import requests
 from app.core.config import settings
 from app.core.summaries_utils import clean_vtt
 from app.core.supabase_client import SupabaseClient
+from app.services.metrics_service import (
+    finalize_async_invocation,
+    finalize_invocation,
+    record_transport,
+    start_invocation,
+)
 
 
 # ------------------------------------------------------------------
@@ -77,7 +81,7 @@ def _get_n8n_webhook() -> str:
 def _get_callback_url() -> str:
     if settings.BACKEND_PUBLIC_URL:
         return f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/automation/summary/callback"
-    return ""
+    raise RuntimeError("BACKEND_PUBLIC_URL no está configurado para callbacks de n8n")
 
 
 # ------------------------------------------------------------------
@@ -280,16 +284,78 @@ def send_to_n8n(
     file_type: str,
 ) -> None:
     """Envía a n8n una URL firmada para procesar."""
-    update_job(sb, job_id, {"estado": "transcribiendo" if file_type == "audio" else "generando"})
+    job = get_job(sb, job_id) or {}
+    try:
+        callback_url = _get_callback_url()
+        if not settings.N8N_CALLBACK_SECRET:
+            raise RuntimeError("N8N_CALLBACK_SECRET no está configurado")
+    except Exception as exc:
+        update_job(sb, job_id, {"estado": "error", "error_detalle": str(exc)})
+        raise
+    try:
+        attempt_number = int(job.get("intentos") or 0) + 1
+    except (TypeError, ValueError):
+        attempt_number = 1
+    update_job(sb, job_id, {
+        "estado": "transcribiendo" if file_type == "audio" else "generando",
+        "intentos": attempt_number,
+    })
     payload = {
         "job_id": job_id,
         "reunion_id": reunion_id,
         "file_url": file_url,
         "file_type": file_type,
-        "callback_url": _get_callback_url(),
+        "callback_url": callback_url,
         "callback_secret": settings.N8N_CALLBACK_SECRET,
     }
-    requests.post(_get_n8n_webhook(), json=payload, timeout=30)
+    invocation = start_invocation(
+        sb,
+        "procesar_grabacion_resumen",
+        reunion_id=reunion_id,
+        attempt_number=attempt_number,
+        correlation_id=job_id,
+    )
+    try:
+        response = requests.post(_get_n8n_webhook(), json=payload, timeout=30)
+        transport_latency = invocation.elapsed()
+        response_size = len(response.content) if response.content else 0
+        if 200 <= response.status_code < 300:
+            # The callback has no invocation_id, so transport acceptance is
+            # recorded without claiming that asynchronous processing succeeded.
+            record_transport(
+                invocation,
+                status_code=response.status_code,
+                response_size=response_size,
+                transport_latency_seconds=transport_latency,
+                details="Transporte aceptado; resultado asíncrono pendiente.",
+            )
+            return
+
+        finalize_invocation(
+            invocation,
+            "error",
+            status_code=response.status_code,
+            response_size=response_size,
+            transport_latency_seconds=transport_latency,
+            details=response.text[:1000] or "n8n rechazó la solicitud.",
+        )
+        response.raise_for_status()
+    except requests.exceptions.Timeout as exc:
+        finalize_invocation(
+            invocation,
+            "timeout",
+            details=str(exc) or "Timeout contactando a n8n.",
+        )
+        update_job(sb, job_id, {"estado": "error", "error_detalle": "Timeout contactando a n8n."})
+        raise
+    except requests.exceptions.RequestException as exc:
+        finalize_invocation(invocation, "error", details=str(exc))
+        update_job(sb, job_id, {"estado": "error", "error_detalle": str(exc)})
+        raise
+    except Exception as exc:
+        finalize_invocation(invocation, "error", details=str(exc))
+        update_job(sb, job_id, {"estado": "error", "error_detalle": str(exc)})
+        raise
 
 
 # ------------------------------------------------------------------
@@ -414,6 +480,12 @@ def cleanup_expired_recordings(sb: SupabaseClient) -> dict[str, Any]:
         try:
             if row.get("archivo_path"):
                 sb.storage_delete(_bucket(), [row["archivo_path"]])
+            finalize_async_invocation(
+                sb,
+                row["id"],
+                "cancelled",
+                details="Trabajo expirado durante la limpieza.",
+            )
             sb.delete("trabajos_resumen", params={"id": f"eq.{row['id']}"})
             deleted += 1
         except Exception as e:

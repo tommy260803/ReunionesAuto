@@ -27,7 +27,7 @@ Se construyó un servidor API RESTful completamente nuevo bajo el directorio `/b
   - Generación de resúmenes virtuales.
   - Generación de resúmenes presenciales (multipart/form-data con carga de PDFs).
   - Chatbot conversacional para agendar reuniones automáticas.
-- **Métricas:** Creación de endpoints estadísticos (`/tasks/metrics`, `/metrics/n8n` y `/metrics/n8n/stats`) diseñados específicamente para ser consumidos por gráficos en el cliente. El último agrupa tasa de éxito, latencia, volumen diario, endpoint y los últimos 50 eventos.
+- **Métricas:** Endpoints operativos e inferenciales (`/tasks/metrics`, `/metrics/n8n`, `/metrics/n8n/stats` y `/metrics/n8n/statistics`). La telemetría inferencial utiliza una fila por invocación, cohorte productiva y pruebas Welch/Chi-cuadrado/Fisher.
 - **Reportes en PDF:** Migración exitosa de la lógica de pandas/reportlab a FastAPI (`/reports/`), generando streams en memoria (`BytesIO`) en lugar de archivos físicos.
 
 ---
@@ -94,6 +94,7 @@ npm run dev
 | `GET` | `/reports/tasks/pdf` | Descarga el reporte de tareas. | Administrador |
 | `GET` | `/metrics/n8n` | Consulta el historial de métricas de n8n. | Administrador |
 | `GET` | `/metrics/n8n/stats` | Consulta KPIs, agregados y últimos 50 logs de n8n. | Administrador |
+| `GET` | `/metrics/n8n/statistics` | Compara dos periodos de un mismo flujo con Welch y Chi-cuadrado/Fisher. | Administrador |
 
 Los endpoints existentes `PATCH /meetings/{meeting_id}`, `PATCH /participants/{participant_id}` y `PATCH /tasks/{task_id}` son los utilizados por las nuevas ediciones en pantalla.
 
@@ -163,5 +164,18 @@ Archivos principales de presentación modificados:
 - La topología de confirmación de `AsistenteIA1` fue validada para ejecutar `Preparar respuesta confirmada` después de la RPC de Supabase.
 
 Next.js detecta dos archivos `package-lock.json` en directorios distintos y muestra una advertencia sobre la raíz de Turbopack. La compilación no se ve afectada.
+
+---
+
+## 10. Despliegue De Métricas Inferenciales
+
+1. Ejecutar `querys para supabase/query8_metricas_inferenciales.sql` después de `query7_resumenes_modulo.sql`.
+2. Configurar `SUPABASE_SERVICE_ROLE_KEY`, `N8N_WORKFLOW_VERSION`, `N8N_CALLBACK_SECRET` y `BACKEND_PUBLIC_URL` en el backend.
+3. Reiniciar FastAPI para iniciar la cohorte productiva limpia.
+4. Reimportar workflows modificados si se cambia el contrato de callback de n8n.
+5. Verificar una invocación síncrona y una asíncrona antes de recolectar datos del artículo.
+6. No ejecutar el seed de demostración en la base usada para evidencia empírica.
+
+Los registros anteriores a la migración quedan marcados como `legacy`. El panel inferencial solo analiza `production` por defecto y permite seleccionar `demo` con una advertencia explícita.
 
 ¡Todo el sistema ha sido migrado exitosamente con una mejora drástica en arquitectura y apariencia visual!
