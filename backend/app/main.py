@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
 from app.auth.router import router as auth_router
 from app.users.router import router as users_router
 from app.meetings.router import router as meetings_router
@@ -24,6 +25,7 @@ from app.ai_executions.router import router as ai_executions_router
 from app.evaluations.router import router as evaluations_router
 from app.experiments.router import router as experiments_router
 from app.analyses.router import router as analyses_router
+from app.actas.router import router as actas_router
 
 # ------------------------------------------------------------------
 # Instancia de FastAPI
@@ -39,14 +41,18 @@ app = FastAPI(
 # CORS
 # ------------------------------------------------------------------
 
+_CORS_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+if settings.FRONTEND_URL and settings.FRONTEND_URL not in _CORS_ORIGINS:
+    _CORS_ORIGINS.append(settings.FRONTEND_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=_CORS_ORIGINS,
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|::1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
@@ -73,6 +79,7 @@ app.include_router(ai_executions_router)
 app.include_router(evaluations_router)
 app.include_router(experiments_router)
 app.include_router(analyses_router)
+app.include_router(actas_router)
 
 # ------------------------------------------------------------------
 # Manejadores de errores globales

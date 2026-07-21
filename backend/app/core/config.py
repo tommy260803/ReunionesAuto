@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     ZOOM_CLIENT_ID: str = ""
     ZOOM_CLIENT_SECRET: str = ""
 
+    # --- Frontend ---
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # --- LLM (Groq / OpenAI-compatible) ---
+    GROQ_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://api.groq.com/openai/v1"
+    LLM_MODEL: str = "llama-3.3-70b-versatile"
+
+    # --- Storage para actas ---
+    ACTAS_STORAGE_BUCKET: str = "actas-reuniones"
+
     model_config = {
         "env_file": str(_ENV_FILE),
         "env_file_encoding": "utf-8",

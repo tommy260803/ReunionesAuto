@@ -1,0 +1,46 @@
+services:
+  - type: web
+    name: reunionesauto-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.lock.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_URL
+        sync: false
+      - key: BACKEND_PUBLIC_URL
+        value: "https://reunionesauto.onrender.com"
+      - key: N8N_CREATE_MEETING_WEBHOOK_URL
+        sync: false
+      - key: N8N_DRAFT_MEETING_WEBHOOK_URL
+        sync: false
+      - key: N8N_RESUMEN_VIRTUAL_WEBHOOK_URL
+        sync: false
+      - key: N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL
+        sync: false
+      - key: N8N_PROCESS_RECORDING_WEBHOOK_URL
+        sync: false
+      - key: N8N_CALLBACK_SECRET
+        sync: false
+      - key: N8N_WORKFLOW_VERSION
+        value: "unversioned"
+      - key: ZOOM_ACCOUNT_ID
+        sync: false
+      - key: ZOOM_CLIENT_ID
+        sync: false
+      - key: ZOOM_CLIENT_SECRET
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

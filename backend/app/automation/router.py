@@ -202,7 +202,7 @@ async def generate_virtual_summary(
         )
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/summary/presencial", summary="Procesar acta en PDF vía n8n webhook")
+@router.post("/summary/presencial", summary="Procesar acta en PDF/Word vía n8n webhook")
 async def generate_presencial_summary(
     reunion_id: str = Form(...),
     file: UploadFile = File(...),
@@ -210,12 +210,24 @@ async def generate_presencial_summary(
     sb: SupabaseClient = Depends(get_supabase)
 ):
     """
-    Envía un archivo PDF a n8n para su procesamiento OCR.
+    Envía un archivo PDF o Word a n8n para su procesamiento.
     El workflow responde después de guardar el resumen; el frontend puede
     consultar Supabase después de recibir esta confirmación.
     """
     if not settings.N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL:
         raise HTTPException(status_code=500, detail="N8N_RESUMEN_PRESENCIAL_WEBHOOK_URL no configurado")
+    
+    # Soportar PDF y Word
+    allowed_types = {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+    allowed_extensions = {".pdf", ".docx"}
+    filename = file.filename or "document.pdf"
+    ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    
+    if file.content_type not in allowed_types and ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Solo se aceptan archivos PDF y Word (.docx)."
+        )
     
     files = {"data": (file.filename, await file.read(), file.content_type)}
     data_form = {"reunion_id": reunion_id, "nombre_archivo": file.filename}

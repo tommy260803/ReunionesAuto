@@ -3,7 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Activity, Beaker, Bot, CheckSquare, FileText, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Radio, UserCircle, Users, Video, X } from "lucide-react";
+import { Activity, Beaker, Bot, CheckSquare, FileText, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Radio, ScrollText, UserCircle, Users, Video, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { LanguageToggle } from "@/components/ui/LanguageToggle";
@@ -17,6 +17,7 @@ const labels: Record<string, string> = {
   "/participants": "shell.participants",
   "/tasks": "shell.tasks",
   "/summaries": "shell.summariesAi",
+  "/actas": "shell.actas",
   "/users": "shell.users",
   "/metrics": "shell.metrics",
   "/research": "Investigación",
@@ -41,6 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: t("shell.participants"), href: "/participants", icon: Users },
     { name: t("shell.tasks"), href: "/tasks", icon: CheckSquare },
     { name: t("shell.summaries"), href: "/summaries", icon: FileText },
+    { name: t("shell.actas"), href: "/actas", icon: ScrollText },
   ];
   if (user.is_admin) {
     navItems.push({ name: "Investigación", href: "/research", icon: Beaker });

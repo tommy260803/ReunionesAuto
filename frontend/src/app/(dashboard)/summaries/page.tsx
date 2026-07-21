@@ -237,8 +237,11 @@ export default function SummariesPage() {
 
   const uploadFile = async (file: File) => {
     if (!selectedMeetingId) return;
-    if (file.type !== "application/pdf") {
-      setError(t("summaries.onlyPdf"));
+    const allowedTypes = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+    const allowedExts = [".pdf", ".docx"];
+    const ext = "." + file.name.split(".").pop()?.toLowerCase();
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
+      setError(t("summaries.onlyPdfOrWord"));
       return;
     }
     setGenerating(true);
@@ -625,10 +628,10 @@ export default function SummariesPage() {
                   </div>
                   <h4 className="text-lg font-medium text-foreground mb-2">{generating ? t("summaries.processingMinutes") : t("summaries.uploadMinutes")}</h4>
                   <p className="text-sm app-muted mb-6 text-center">{generating ? t("summaries.processingText") : t("summaries.dropText")}</p>
-                  <input type="file" accept=".pdf" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                  <input type="file" accept=".pdf,.docx" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
                   {!generating && (
                     <button onClick={() => fileInputRef.current?.click()} className="btn-primary bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-500/20">
-                      {t("summaries.selectPdf")}
+                      {t("summaries.selectPdfOrWord")}
                     </button>
                   )}
                 </div>

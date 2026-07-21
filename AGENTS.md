@@ -8,9 +8,9 @@
 - Legacy: `app.py` is the former Streamlit implementation and is not the active application.
 
 ## Setup
-1. Run SQL scripts in order: `query1.txt`, `query2.txt`, `query3.txt`, `query4.txt`, `insert_sample_tasks.sql`, `query5_metricas.txt`, `query6_reuniones_participantes.sql`, `query7_resumenes_modulo.sql`, `query8_metricas_inferenciales.sql`.
+1. Run SQL scripts in order: `query1.txt`, `query2.txt`, `query3.txt`, `query4.txt`, `insert_sample_tasks.sql`, `query5_metricas.txt`, `query6_reuniones_participantes.sql`, `query7_resumenes_modulo.sql`, `query8_metricas_inferenciales.sql`, `query14_actas_modulo.sql`.
 2. Import the required workflows from `json n8n/` and configure their credentials.
-3. Configure root `.env`, including `SUPABASE_SERVICE_ROLE_KEY`, n8n webhook URLs, `N8N_CALLBACK_SECRET` and `N8N_WORKFLOW_VERSION`.
+3. Configure root `.env`, including `SUPABASE_SERVICE_ROLE_KEY`, n8n webhook URLs, `N8N_CALLBACK_SECRET`, `N8N_WORKFLOW_VERSION`, and `GROQ_API_KEY` (or `OPENAI_API_KEY`) for AI-powered acta generation.
 4. Install backend dependencies from `backend/requirements.lock.txt` for a reproducible environment.
 5. Install frontend dependencies with `npm ci` in `frontend/`.
 
@@ -40,3 +40,10 @@ npm run build --prefix frontend
 - One asynchronous job is correlated through `correlation_id` and finalized by its callback.
 - Admin access is checked by the backend dependency in `backend/app/core/dependencies.py`.
 - Never expose `SUPABASE_SERVICE_ROLE_KEY` to the frontend.
+
+## Actas Module
+- New table `actas` with auto-incremented `numero`, meeting FK, structured sections (decisiones, tareas, proximos_pasos).
+- Backend: `backend/app/actas/` with router, schemas. Services: `document_parser.py` (PDF/Word extraction), `acta_generator.py` (LLM-powered acta generation).
+- Frontend: `/actas` page with upload (PDF/Word), text paste, edit, finalize, and filter by meeting type.
+- Supports all meeting types: virtual, presencial, mixta.
+- LLM config: `GROQ_API_KEY` or `OPENAI_API_KEY` in `.env`, defaults to Groq llama-3.3-70b-versatile.
