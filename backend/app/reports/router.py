@@ -29,6 +29,53 @@ from app.reports.generator import (
 router = APIRouter(prefix="/reports", tags=["Reportes"])
 
 
+@router.get("", summary="Listar reportes disponibles")
+async def list_reports(
+    user: dict = Depends(get_current_investigator),
+) -> list[dict]:
+    """Devuelve lista de reportes exportables (análisis y experimentos completados)."""
+    sb = get_supabase()
+    reports: list[dict] = []
+
+    try:
+        analyses = sb.select(
+            "statistical_analyses",
+            {"select": "id,nombre,estado,fecha_creacion", "creado_por": f"eq.{user['id']}", "order": "fecha_creacion.desc"},
+        )
+    except Exception:
+        analyses = []
+
+    for a in analyses:
+        reports.append({
+            "id": a["id"],
+            "nombre": a["nombre"],
+            "tipo": "ANALISIS",
+            "formato": "PDF",
+            "fecha_generacion": a.get("fecha_creacion", ""),
+            "estado": a["estado"],
+        })
+
+    try:
+        experiments = sb.select(
+            "experiment_sessions",
+            {"select": "id,nombre,estado,fecha_inicio", "investigador_id": f"eq.{user['id']}", "order": "fecha_inicio.desc"},
+        )
+    except Exception:
+        experiments = []
+
+    for e in experiments:
+        reports.append({
+            "id": e["id"],
+            "nombre": e["nombre"],
+            "tipo": "EXPERIMENTO",
+            "formato": "PDF",
+            "fecha_generacion": e.get("fecha_inicio", ""),
+            "estado": e["estado"],
+        })
+
+    return reports
+
+
 def build_pdf(title: str, headers: list[str], rows: list[list[str]], filename: str) -> Response:
     """Genera un reporte tabular simple, manteniendo el PDF en memoria."""
     try:

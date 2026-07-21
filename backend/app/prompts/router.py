@@ -21,7 +21,7 @@ router = APIRouter(prefix="/prompts", tags=["Prompts"])
 
 
 @router.post(
-    "/",
+    "",
     response_model=PromptVersionResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Crear nueva versión de prompt"
@@ -103,7 +103,7 @@ async def create_prompt(
 
 
 @router.get(
-    "/",
+    "",
     response_model=List[PromptVersionListResponse],
     summary="Listar versiones de prompts"
 )

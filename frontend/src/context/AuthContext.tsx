@@ -54,12 +54,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (pathname === "/login" || pathname === "/register") {
           router.push("/dashboard");
         }
-      } catch (error) {
-        console.error("Error validando sesión:", error);
-        Cookies.remove("access_token");
-        setUser(null);
-        if (!publicPaths.includes(pathname)) {
-          router.push("/login");
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 401) {
+          Cookies.remove("access_token");
+          setUser(null);
+          if (!publicPaths.includes(pathname)) {
+            router.push("/login");
+          }
         }
       } finally {
         setLoading(false);
@@ -67,7 +69,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
     
     fetchUser();
-  }, [pathname, router]);
+  }, []);
 
   const login = (token: string, userData: User) => {
     Cookies.set("access_token", token, { expires: 1 }); // 1 día

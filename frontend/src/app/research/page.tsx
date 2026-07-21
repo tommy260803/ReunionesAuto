@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
+import { Loader2, BarChart3, FlaskConical, MessageSquare, FileText, ArrowRight } from "lucide-react";
 
 interface DashboardStats {
   total_analyses: number;
@@ -21,26 +22,24 @@ export default function ResearchDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const safeGet = async <T,>(url: string): Promise<T[]> => {
+      try { const res = await api.get<T[]>(url); return res.data || []; } catch { return []; }
+    };
+
     const fetchStats = async () => {
       try {
-        // Fetch statistics from API
-        const [analysesRes, experimentsRes, evaluationsRes, promptsRes] = await Promise.all([
-          api.get("/research/analyses"),
-          api.get("/experiments"),
-          api.get("/evaluations"),
-          api.get("/prompts"),
+        const [analyses, experiments, evaluations, prompts] = await Promise.all([
+          safeGet<any>("/api/v1/research/analyses"),
+          safeGet<any>("/experiments/sessions"),
+          safeGet<any>("/evaluations/summaries"),
+          safeGet<any>("/prompts"),
         ]);
-
-        const analyses = analysesRes.data || [];
-        const experiments = experimentsRes.data || [];
-        const evaluations = evaluationsRes.data || [];
-        const prompts = promptsRes.data || [];
 
         setStats({
           total_analyses: analyses.length,
           completed_analyses: analyses.filter((a: any) => a.estado === "COMPLETADO").length,
           total_experiments: experiments.length,
-          active_experiments: experiments.filter((e: any) => e.estado === "ACTIVO").length,
+          active_experiments: experiments.filter((e: any) => e.estado === "ACTIVO" || e.estado === "EN_CURSO").length,
           total_evaluations: evaluations.length,
           pending_evaluations: evaluations.filter((e: any) => e.estado === "PENDIENTE").length,
           total_prompts: prompts.length,
@@ -53,144 +52,109 @@ export default function ResearchDashboard() {
       }
     };
 
-    if (user) {
-      fetchStats();
-    }
+    if (user) fetchStats();
   }, [user]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Dashboard de Investigación</h1>
-        <p className="mt-2 text-gray-600">
-          Bienvenido, {user?.nombre}. Gestiona tus análisis estadísticos y experimentos.
-        </p>
+        <p className="mt-2 text-gray-600">Bienvenido{user?.nombre ? `, ${user.nombre}` : ""}. Gestiona tus análisis estadísticos y experimentos.</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Análisis Totales"
+          title="Análisis"
           value={stats?.total_analyses || 0}
           subtitle={`${stats?.completed_analyses || 0} completados`}
+          icon={<BarChart3 className="w-5 h-5" />}
           color="indigo"
-          link="/research/analyses"
+          href="/research/analyses"
         />
         <StatCard
           title="Experimentos"
           value={stats?.total_experiments || 0}
           subtitle={`${stats?.active_experiments || 0} activos`}
-          color="green"
-          link="/research/experiments"
+          icon={<FlaskConical className="w-5 h-5" />}
+          color="emerald"
+          href="/research/experiments"
         />
         <StatCard
           title="Evaluaciones"
           value={stats?.total_evaluations || 0}
           subtitle={`${stats?.pending_evaluations || 0} pendientes`}
-          color="yellow"
-          link="/research/evaluations"
+          icon={<MessageSquare className="w-5 h-5" />}
+          color="amber"
+          href="/research/evaluations"
         />
         <StatCard
           title="Prompts"
           value={stats?.total_prompts || 0}
           subtitle={`${stats?.active_prompts || 0} activos`}
+          icon={<FileText className="w-5 h-5" />}
           color="purple"
-          link="/research/prompts"
+          href="/research/prompts"
         />
       </div>
 
-      {/* Quick Actions */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Acciones Rápidas</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <QuickActionButton
-            title="Nuevo Análisis"
-            description="Crear un análisis estadístico"
-            link="/research/analyses/new"
-            icon="📊"
-          />
-          <QuickActionButton
-            title="Nueva Sesión Experimental"
-            description="Iniciar un experimento"
-            link="/research/experiments/new"
-            icon="🧪"
-          />
-          <QuickActionButton
-            title="Evaluar Resumen"
-            description="Evaluar calidad de resumen"
-            link="/research/evaluations/new"
-            icon="✓"
-          />
-        </div>
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Actividad Reciente</h2>
-        <div className="space-y-4">
-          <ActivityItem
-            title="Análisis completado"
-            description="Comparación de prompts v1.0 vs v1.1"
-            time="Hace 2 horas"
-            type="success"
-          />
-          <ActivityItem
-            title="Evaluación pendiente"
-            description="Resumen de reunión #12345"
-            time="Hace 5 horas"
-            type="warning"
-          />
-          <ActivityItem
-            title="Experimento iniciado"
-            description="Sesión experimental #456"
-            time="Ayer"
-            type="info"
-          />
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <QuickActionCard
+          title="Nuevo Análisis"
+          description="Crear un análisis estadístico"
+          href="/research/analyses/new"
+          color="indigo"
+        />
+        <QuickActionCard
+          title="Nueva Sesión Experimental"
+          description="Iniciar un experimento"
+          href="/research/experiments/new"
+          color="emerald"
+        />
+        <QuickActionCard
+          title="Evaluar Resumen"
+          description="Evaluación ciega de calidad"
+          href="/research/evaluations/blind"
+          color="amber"
+        />
       </div>
     </div>
   );
 }
 
-function StatCard({
-  title,
-  value,
-  subtitle,
-  color,
-  link,
-}: {
+function StatCard({ title, value, subtitle, icon, color, href }: {
   title: string;
   value: number;
   subtitle: string;
+  icon: React.ReactNode;
   color: string;
-  link: string;
+  href: string;
 }) {
-  const colorClasses = {
-    indigo: "bg-indigo-500",
-    green: "bg-green-500",
-    yellow: "bg-yellow-500",
-    purple: "bg-purple-500",
+  const colors: Record<string, string> = {
+    indigo: "bg-indigo-50 text-indigo-600",
+    emerald: "bg-emerald-50 text-emerald-600",
+    amber: "bg-amber-50 text-amber-600",
+    purple: "bg-purple-50 text-purple-600",
   };
 
   return (
-    <a href={link} className="block">
-      <div className="bg-white shadow rounded-lg p-6 hover:shadow-md transition-shadow">
-        <div className="flex items-center justify-between">
+    <a href={href} className="block group">
+      <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md hover:border-gray-300 transition-all">
+        <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-600">{title}</p>
-            <p className="text-3xl font-bold text-gray-900 mt-2">{value}</p>
-            <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+            <p className="text-sm font-medium text-gray-500">{title}</p>
+            <p className="text-3xl font-bold text-gray-900 mt-1">{value}</p>
+            <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
           </div>
-          <div className={`h-12 w-12 ${colorClasses[color as keyof typeof colorClasses]} rounded-lg flex items-center justify-center text-white text-xl`}>
-            📈
+          <div className={`h-10 w-10 rounded-xl ${colors[color] || colors.indigo} flex items-center justify-center`}>
+            {icon}
           </div>
         </div>
       </div>
@@ -198,61 +162,27 @@ function StatCard({
   );
 }
 
-function QuickActionButton({
-  title,
-  description,
-  link,
-  icon,
-}: {
+function QuickActionCard({ title, description, href, color }: {
   title: string;
   description: string;
-  link: string;
-  icon: string;
+  href: string;
+  color: string;
 }) {
-  return (
-    <a href={link} className="block">
-      <div className="border border-gray-200 rounded-lg p-4 hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
-        <div className="flex items-center space-x-3">
-          <div className="text-2xl">{icon}</div>
-          <div>
-            <h3 className="font-medium text-gray-900">{title}</h3>
-            <p className="text-sm text-gray-500">{description}</p>
-          </div>
-        </div>
-      </div>
-    </a>
-  );
-}
-
-function ActivityItem({
-  title,
-  description,
-  time,
-  type,
-}: {
-  title: string;
-  description: string;
-  time: string;
-  type: "success" | "warning" | "info";
-}) {
-  const typeClasses = {
-    success: "bg-green-100 text-green-800",
-    warning: "bg-yellow-100 text-yellow-800",
-    info: "bg-blue-100 text-blue-800",
+  const borders: Record<string, string> = {
+    indigo: "hover:border-indigo-300 hover:bg-indigo-50/50",
+    emerald: "hover:border-emerald-300 hover:bg-emerald-50/50",
+    amber: "hover:border-amber-300 hover:bg-amber-50/50",
   };
 
   return (
-    <div className="flex items-start space-x-3">
-      <div className={`h-8 w-8 rounded-full ${typeClasses[type]} flex items-center justify-center flex-shrink-0`}>
-        {type === "success" && "✓"}
-        {type === "warning" && "!"}
-        {type === "info" && "i"}
+    <a href={href} className={`block bg-white border border-gray-200 rounded-2xl p-5 shadow-sm transition-all ${borders[color] || ""}`}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-semibold text-gray-900">{title}</h3>
+          <p className="text-sm text-gray-500 mt-0.5">{description}</p>
+        </div>
+        <ArrowRight className="w-5 h-5 text-gray-400" />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900">{title}</p>
-        <p className="text-sm text-gray-500">{description}</p>
-      </div>
-      <div className="text-sm text-gray-400">{time}</div>
-    </div>
+    </a>
   );
 }
