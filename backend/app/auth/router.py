@@ -44,7 +44,7 @@ async def login(
     """
     # Buscar usuario por correo
     rows = sb.select("usuarios", {
-        "select": "id,correo,nombre,password_hash,nivel_suscripcion,estado_suscripcion",
+        "select": "id,correo,nombre,password_hash,nivel_suscripcion,estado_suscripcion,rol",
         "correo": f"eq.{body.email}",
     })
     if not rows:
@@ -62,8 +62,11 @@ async def login(
             detail="Credenciales inválidas.",
         )
 
-    # Determinar si es administrador
-    is_admin = user.get("correo", "").lower() == settings.ADMIN_EMAIL.lower()
+    # Determinar roles basados en rol de BD
+    rol = user.get("rol", "USUARIO")
+    is_admin = rol == "ADMIN"
+    is_investigator = rol in ("ADMIN", "INVESTIGADOR")
+    is_evaluator = rol in ("ADMIN", "INVESTIGADOR", "EVALUADOR")
 
     # Crear token JWT (sub = id del usuario)
     access_token = create_access_token({"sub": str(user["id"])})
@@ -76,7 +79,10 @@ async def login(
             nombre=user.get("nombre", ""),
             nivel_suscripcion=user.get("nivel_suscripcion", "basico"),
             estado_suscripcion=user.get("estado_suscripcion", "activo"),
+            rol=rol,
             is_admin=is_admin,
+            is_investigator=is_investigator,
+            is_evaluator=is_evaluator,
         ),
     )
 
@@ -135,11 +141,15 @@ async def me(user: dict = Depends(get_current_user)) -> UserResponse:
     """
     Retorna los datos del usuario autenticado a partir de su token JWT.
     """
+    rol = user.get("rol", "USUARIO")
     return UserResponse(
         id=user["id"],
         correo=user["correo"],
         nombre=user.get("nombre", ""),
         nivel_suscripcion=user.get("nivel_suscripcion", "basico"),
         estado_suscripcion=user.get("estado_suscripcion", "activo"),
+        rol=rol,
         is_admin=user.get("is_admin", False),
+        is_investigator=user.get("is_investigator", False),
+        is_evaluator=user.get("is_evaluator", False),
     )

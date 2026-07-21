@@ -1,12 +1,15 @@
 """
 Router de reportes.
 
-Endpoints para exportación de datos en PDF.
+Endpoints para exportación de datos en PDF, Word y Excel.
 """
 
 from io import BytesIO
+from typing import Any
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Response
-from app.core.dependencies import get_current_admin
+from app.core.dependencies import get_current_admin, get_current_investigator
 from app.core.supabase_client import SupabaseClient, get_supabase
 
 try:
@@ -16,6 +19,12 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet
 except ImportError:
     pass  # Dependencias opcionales
+
+from app.reports.generator import (
+    check_format_availability,
+    generate_report,
+    get_missing_dependency,
+)
 
 router = APIRouter(prefix="/reports", tags=["Reportes"])
 
@@ -200,3 +209,124 @@ async def export_tasks_pdf(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/research/generate", summary="Generar reporte de investigación")
+async def generate_research_report(
+    report_type: str,
+    format_type: str,
+    data: dict[str, Any],
+    title: str,
+    user: dict = Depends(get_current_investigator),
+) -> Response:
+    """
+    Genera un reporte de investigación en el formato solicitado.
+    
+    Args:
+        report_type: Tipo de reporte (ANALISIS, EXPERIMENTO, EVALUACION)
+        format_type: Formato (PDF, WORD, EXCEL)
+        data: Datos del reporte
+        title: Título del reporte
+    """
+    # Verificar disponibilidad del formato
+    availability = check_format_availability(format_type)
+    if not availability["available"]:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Formato {format_type} no disponible. Dependencia faltante: {availability['missing_dependency']}"
+        )
+    
+    try:
+        report_bytes = generate_report(report_type, format_type, data, title)
+        
+        # Determinar media type y extensión
+        media_types = {
+            "PDF": "application/pdf",
+            "WORD": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "EXCEL": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+        
+        extensions = {
+            "PDF": "pdf",
+            "WORD": "docx",
+            "EXCEL": "xlsx",
+        }
+        
+        filename = f"{title.replace(' ', '_').lower()}.{extensions[format_type]}"
+        
+        return Response(
+            content=report_bytes,
+            media_type=media_types[format_type],
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generando reporte: {str(e)}")
+
+
+@router.get("/research/analyses/{analysis_id}/export", summary="Exportar análisis a PDF/Word/Excel")
+async def export_analysis_report(
+    analysis_id: UUID,
+    format_type: str = "PDF",
+    user: dict = Depends(get_current_investigator),
+    sb: SupabaseClient = Depends(get_supabase),
+) -> Response:
+    """Exporta un análisis estadístico al formato solicitado."""
+    # Obtener análisis
+    analysis = sb.select("statistical_analyses", {"select": "*", "id": f"eq.{analysis_id}"})
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Análisis no encontrado")
+    
+    # Verificar permisos
+    if analysis[0]["creado_por"] != user["id"] and user.get("rol") != "ADMIN":
+        raise HTTPException(status_code=403, detail="No tienes permiso para exportar este análisis")
+    
+    # Obtener resultados
+    results = sb.select("statistical_analysis_results", {"select": "*", "analysis_id": f"eq.{analysis_id}"})
+    
+    # Preparar datos
+    data = {
+        "nombre": analysis[0]["nombre"],
+        "objetivo": analysis[0]["objetivo"],
+        "variable_resultado": analysis[0]["variable_resultado"],
+        "diseno": analysis[0]["diseno"],
+        "prueba_ejecutada": analysis[0]["prueba_ejecutada"],
+        "alpha": analysis[0]["alpha"],
+        "correccion_multiple": analysis[0]["correccion_multiple"],
+    }
+    
+    if results:
+        data.update(results[0])
+    
+    return await generate_research_report(
+        report_type="ANALISIS",
+        format_type=format_type,
+        data=data,
+        title=analysis[0]["nombre"],
+        user=user,
+    )
+
+
+@router.get("/research/experiments/{experiment_id}/export", summary="Exportar experimento a PDF/Word/Excel")
+async def export_experiment_report(
+    experiment_id: UUID,
+    format_type: str = "PDF",
+    user: dict = Depends(get_current_investigator),
+    sb: SupabaseClient = Depends(get_supabase),
+) -> Response:
+    """Exporta una sesión experimental al formato solicitado."""
+    # Obtener experimento
+    experiment = sb.select("experiment_sessions", {"select": "*", "id": f"eq.{experiment_id}"})
+    if not experiment:
+        raise HTTPException(status_code=404, detail="Sesión experimental no encontrada")
+    
+    # Verificar permisos
+    if experiment[0]["creado_por"] != user["id"] and user.get("rol") != "ADMIN":
+        raise HTTPException(status_code=403, detail="No tienes permiso para exportar esta sesión")
+    
+    return await generate_research_report(
+        report_type="EXPERIMENTO",
+        format_type=format_type,
+        data=experiment[0],
+        title=experiment[0]["nombre"],
+        user=user,
+    )

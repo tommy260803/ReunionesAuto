@@ -39,7 +39,10 @@ class UserResponse(BaseModel):
     nombre: str
     nivel_suscripcion: str
     estado_suscripcion: str
+    rol: str = "USUARIO"
     is_admin: bool = False
+    is_investigator: bool = False
+    is_evaluator: bool = False
 
 
 class TokenResponse(BaseModel):

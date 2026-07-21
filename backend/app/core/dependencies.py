@@ -52,10 +52,12 @@ async def get_current_user(
         )
 
     user = rows[0]
-    # Agregar flag de administrador
-    user["is_admin"] = (
-        user.get("correo", "").lower() == settings.ADMIN_EMAIL.lower()
-    )
+    # Agregar flag de administrador basado en rol de BD
+    user["is_admin"] = user.get("rol", "USUARIO") == "ADMIN"
+    # Agregar flag de investigador
+    user["is_investigator"] = user.get("rol", "USUARIO") in ("ADMIN", "INVESTIGADOR")
+    # Agregar flag de evaluador
+    user["is_evaluator"] = user.get("rol", "USUARIO") in ("ADMIN", "INVESTIGADOR", "EVALUADOR")
     return user
 
 
@@ -65,11 +67,43 @@ async def get_current_admin(
     """
     Verifica que el usuario autenticado sea administrador.
 
-    Lanza HTTP 403 si el correo no coincide con ADMIN_EMAIL.
+    Lanza HTTP 403 si el rol no es ADMIN.
     """
     if not user.get("is_admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso restringido a administradores.",
+        )
+    return user
+
+
+async def get_current_investigator(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Verifica que el usuario autenticado sea investigador o administrador.
+
+    Lanza HTTP 403 si el rol no es INVESTIGADOR o ADMIN.
+    """
+    if not user.get("is_investigator"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso restringido a investigadores y administradores.",
+        )
+    return user
+
+
+async def get_current_evaluator(
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    Verifica que el usuario autenticado sea evaluador, investigador o administrador.
+
+    Lanza HTTP 403 si el rol no es EVALUADOR, INVESTIGADOR o ADMIN.
+    """
+    if not user.get("is_evaluator"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso restringido a evaluadores, investigadores y administradores.",
         )
     return user

@@ -3,7 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Activity, Bot, CheckSquare, FileText, LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Radio, UserCircle, Users, Video, X } from "lucide-react";
+import { Activity, Bot, CheckSquare, FileText, FlaskConical, LayoutDashboard, LogOut, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Radio, UserCircle, Users, Video, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { LanguageToggle } from "@/components/ui/LanguageToggle";
@@ -19,6 +19,9 @@ const labels: Record<string, string> = {
   "/summaries": "shell.summariesAi",
   "/users": "shell.users",
   "/metrics": "shell.metrics",
+  "/dashboard/prompts": "Prompts",
+  "/dashboard/evaluations": "Evaluaciones",
+  "/dashboard/experiments": "Experimentos",
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -42,6 +45,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: t("shell.summaries"), href: "/summaries", icon: FileText },
   ];
   if (user.is_admin) {
+    navItems.push({ name: "Prompts", href: "/dashboard/prompts", icon: FileText });
+    navItems.push({ name: "Evaluaciones", href: "/dashboard/evaluations", icon: MessageSquare });
+    navItems.push({ name: "Experimentos", href: "/dashboard/experiments", icon: FlaskConical });
     navItems.push({ name: t("shell.users"), href: "/users", icon: Users });
     navItems.push({ name: t("shell.metrics"), href: "/metrics", icon: Activity });
   }

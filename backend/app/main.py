@@ -19,6 +19,11 @@ from app.automation.router import router as automation_router
 from app.summaries.router import router as summaries_router
 from app.metrics.router import router as metrics_router
 from app.reports.router import router as reports_router
+from app.prompts.router import router as prompts_router
+from app.ai_executions.router import router as ai_executions_router
+from app.evaluations.router import router as evaluations_router
+from app.experiments.router import router as experiments_router
+from app.analyses.router import router as analyses_router
 
 # ------------------------------------------------------------------
 # Instancia de FastAPI
@@ -39,6 +44,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -58,6 +65,11 @@ app.include_router(automation_router)
 app.include_router(summaries_router)
 app.include_router(metrics_router)
 app.include_router(reports_router)
+app.include_router(prompts_router)
+app.include_router(ai_executions_router)
+app.include_router(evaluations_router)
+app.include_router(experiments_router)
+app.include_router(analyses_router)
 
 # ------------------------------------------------------------------
 # Manejadores de errores globales

@@ -3,7 +3,19 @@ import unittest
 
 from scipy import stats
 
-from app.metrics.statistics import contingency_analysis, welch_t_test
+from app.metrics.statistics import (
+    contingency_analysis,
+    welch_t_test,
+    shapiro_wilk_test,
+    levene_test,
+    mann_whitney_u_test,
+    friedman_test,
+    mcnemar_test,
+    cochran_q_test,
+    holm_correction,
+    cronbach_alpha,
+    validate_data_quality,
+)
 
 
 class WelchTTestTests(unittest.TestCase):
@@ -119,6 +131,259 @@ class ContingencyAnalysisTests(unittest.TestCase):
                 result = contingency_analysis(*counts)
                 self.assertEqual(result["status"], "invalid_data")
                 self.assertIsNone(result["p_value"])
+
+
+class ShapiroWilkTestTests(unittest.TestCase):
+    def test_normal_data_passes_normality_test(self):
+        # Datos normales generados
+        import numpy as np
+        np.random.seed(42)
+        normal_data = np.random.normal(loc=0, scale=1, size=50).tolist()
+        
+        result = shapiro_wilk_test(normal_data)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["statistic"])
+        self.assertIsNotNone(result["p_value"])
+        self.assertEqual(result["n"], 50)
+        self.assertTrue(result["is_normal"])  # Datos normales deberían pasar
+
+    def test_insufficient_data_rejected(self):
+        result = shapiro_wilk_test([1.0, 2.0])
+        
+        self.assertEqual(result["status"], "insufficient_data")
+        self.assertIsNone(result["p_value"])
+
+    def test_large_sample_warned(self):
+        import numpy as np
+        np.random.seed(42)
+        large_data = np.random.normal(loc=0, scale=1, size=6000).tolist()
+        
+        result = shapiro_wilk_test(large_data)
+        
+        self.assertEqual(result["status"], "invalid_data")
+        self.assertIn("5000", result["reason"])
+
+
+class LeveneTestTests(unittest.TestCase):
+    def test_equal_variances_detected(self):
+        import numpy as np
+        np.random.seed(42)
+        group1 = np.random.normal(loc=0, scale=1, size=30).tolist()
+        group2 = np.random.normal(loc=0, scale=1, size=30).tolist()
+        
+        result = levene_test(group1, group2)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["statistic"])
+        self.assertIsNotNone(result["p_value"])
+        self.assertEqual(result["n_groups"], 2)
+        self.assertTrue(result["equal_variances"])  # Varianzas iguales
+
+    def test_insufficient_groups_rejected(self):
+        result = levene_test([1.0, 2.0, 3.0])
+        
+        self.assertEqual(result["status"], "invalid_data")
+        self.assertIn("2 grupos", result["reason"])
+
+
+class MannWhitneyUTestTests(unittest.TestCase):
+    def test_independent_samples_compared(self):
+        group1 = [1, 2, 3, 4, 5]
+        group2 = [6, 7, 8, 9, 10]
+        
+        result = mann_whitney_u_test(group1, group2)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["u_statistic"])
+        self.assertIsNotNone(result["p_value"])
+        self.assertTrue(result["is_significant"])  # Diferencia clara
+        self.assertIsNotNone(result["median_difference"])
+        self.assertIsNotNone(result["effect_size_r"])
+
+    def test_insufficient_data_rejected(self):
+        result = mann_whitney_u_test([1.0], [2.0])
+        
+        self.assertEqual(result["status"], "insufficient_data")
+
+
+class FriedmanTestTests(unittest.TestCase):
+    def test_related_conditions_compared(self):
+        # 3 condiciones, 5 sujetos
+        condition1 = [7, 8, 6, 7, 8]
+        condition2 = [5, 6, 5, 6, 5]
+        condition3 = [9, 8, 9, 8, 9]
+        
+        result = friedman_test(condition1, condition2, condition3)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["statistic"])
+        self.assertIsNotNone(result["p_value"])
+        self.assertEqual(result["n_groups"], 3)
+        self.assertEqual(result["n_observations"], 5)
+        self.assertIsNotNone(result["kendall_w"])
+
+    def test_insufficient_conditions_rejected(self):
+        result = friedman_test([1, 2, 3], [4, 5, 6])
+        
+        self.assertEqual(result["status"], "invalid_data")
+        self.assertIn("3 grupos", result["reason"])
+
+
+class McNemarTestTests(unittest.TestCase):
+    def test_paired_binary_data_compared(self):
+        before = [True, True, False, False, True]
+        after = [True, False, False, True, True]
+        
+        result = mcnemar_test(before, after)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["statistic"])
+        self.assertIsNotNone(result["p_value"])
+        self.assertIsNotNone(result["contingency_table"])
+        self.assertIsNotNone(result["proportion_before"])
+        self.assertIsNotNone(result["proportion_after"])
+
+    def test_mismatched_sizes_rejected(self):
+        result = mcnemar_test([True, False], [True])
+        
+        self.assertEqual(result["status"], "invalid_data")
+        self.assertIn("mismo tamaño", result["reason"])
+
+
+class CochranQTestTests(unittest.TestCase):
+    def test_multiple_binary_conditions_compared(self):
+        # 3 condiciones, 4 sujetos
+        condition1 = [True, True, False, True]
+        condition2 = [False, True, False, True]
+        condition3 = [True, False, True, False]
+        
+        result = cochran_q_test(condition1, condition2, condition3)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["statistic"])
+        self.assertIsNotNone(result["p_value"])
+        self.assertEqual(result["n_conditions"], 3)
+        self.assertEqual(result["n_observations"], 4)
+        self.assertIsNotNone(result["proportions"])
+
+    def test_insufficient_conditions_rejected(self):
+        result = cochran_q_test([True, False], [False, True])
+        
+        self.assertEqual(result["status"], "invalid_data")
+        self.assertIn("3 condiciones", result["reason"])
+
+
+class HolmCorrectionTests(unittest.TestCase):
+    def test_p_values_corrected_step_down(self):
+        p_values = [0.01, 0.04, 0.03, 0.02, 0.05]
+        
+        result = holm_correction(p_values)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["n_comparisons"], 5)
+        self.assertEqual(len(result["p_values_corrected"]), 5)
+        # Los p-values corregidos deberían ser >= los originales
+        for orig, corr in zip(p_values, result["p_values_corrected"]):
+            self.assertGreaterEqual(corr, orig)
+
+    def test_empty_p_values_rejected(self):
+        result = holm_correction([])
+        
+        self.assertEqual(result["status"], "insufficient_data")
+
+    def test_invalid_p_values_rejected(self):
+        result = holm_correction([0.5, 1.5, 0.3])
+        
+        self.assertEqual(result["status"], "invalid_data")
+
+
+class CronbachAlphaTests(unittest.TestCase):
+    def test_consistent_scale_measured(self):
+        # 5 items, 4 sujetos
+        ratings = [
+            [5, 4, 5, 4, 5],  # Sujeto 1
+            [4, 5, 4, 5, 4],  # Sujeto 2
+            [5, 5, 4, 4, 5],  # Sujeto 3
+            [4, 4, 5, 5, 4],  # Sujeto 4
+        ]
+        
+        result = cronbach_alpha(ratings)
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertIsNotNone(result["alpha"])
+        self.assertEqual(result["n_subjects"], 4)
+        self.assertEqual(result["n_items"], 5)
+        self.assertGreater(result["alpha"], 0.7)  # Buena consistencia
+
+    def test_insufficient_subjects_rejected(self):
+        result = cronbach_alpha([[5, 4, 5]])
+        
+        self.assertEqual(result["status"], "insufficient_data")
+
+    def test_no_variation_rejected(self):
+        result = cronbach_alpha([
+            [5, 5, 5],
+            [5, 5, 5],
+        ])
+        
+        self.assertEqual(result["status"], "not_estimable")
+
+
+class DataQualityValidationTests(unittest.TestCase):
+    def test_valid_data_passes(self):
+        data = {
+            "groups": {
+                "group1": {"values": [1, 2, 3, 4, 5]},
+                "group2": {"values": [2, 3, 4, 5, 6]},
+            }
+        }
+        
+        result = validate_data_quality(data, "welch_t_test", "independent")
+        
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["can_proceed"])
+        self.assertEqual(len(result["errors"]), 0)
+
+    def test_empty_condition_detected(self):
+        data = {
+            "groups": {
+                "group1": {"values": [1, 2, 3]},
+                "group2": {"values": []},
+            }
+        }
+        
+        result = validate_data_quality(data, "welch_t_test", "independent")
+        
+        self.assertFalse(result["can_proceed"])
+        self.assertIn("vacía", result["errors"][0])
+
+    def test_missing_values_warned(self):
+        data = {
+            "groups": {
+                "group1": {"values": [1, 2, None, 4, 5]},
+                "group2": {"values": [2, 3, 4, 5, 6]},
+            }
+        }
+        
+        result = validate_data_quality(data, "welch_t_test", "independent")
+        
+        self.assertTrue(result["can_proceed"])  # Advertencia, no error
+        self.assertEqual(result["status"], "warnings")
+        self.assertGreater(len(result["warnings"]), 0)
+
+    def test_paired_design_size_mismatch_detected(self):
+        data = {
+            "groups": {
+                "group1": {"values": [1, 2, 3]},
+                "group2": {"values": [1, 2, 3, 4]},
+            }
+        }
+        
+        result = validate_data_quality(data, "paired_t_test", "paired")
+        
+        self.assertFalse(result["can_proceed"])
+        self.assertIn("tamaños diferentes", result["errors"][0])
 
 
 if __name__ == "__main__":

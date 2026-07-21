@@ -46,9 +46,6 @@ class Settings(BaseSettings):
     ZOOM_CLIENT_ID: str = ""
     ZOOM_CLIENT_SECRET: str = ""
 
-    # --- Correo del administrador (hardcoded) ---
-    ADMIN_EMAIL: str = "juanaureliodelacruzgamarra@gmail.com"
-
     model_config = {
         "env_file": str(_ENV_FILE),
         "env_file_encoding": "utf-8",

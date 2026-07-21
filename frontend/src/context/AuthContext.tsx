@@ -11,6 +11,7 @@ interface User {
   nombre: string;
   nivel_suscripcion: string;
   estado_suscripcion: string;
+  rol: "USUARIO" | "EVALUADOR" | "INVESTIGADOR" | "ADMIN";
   is_admin: boolean;
 }
 
