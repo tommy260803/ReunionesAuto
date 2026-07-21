@@ -4,12 +4,12 @@
 -- Actualizar el rol del usuario administrador principal
 UPDATE usuarios 
 SET rol = 'ADMIN' 
-WHERE correo = 'juanaureliodelacruzgamarra@gmail.com';
+WHERE correo = 'anthonygv268@gmail.com';
 
 -- Verificar el cambio
 SELECT id, nombre, correo, rol 
 FROM usuarios 
-WHERE correo = 'juanaureliodelacruzgamarra@gmail.com';
+WHERE correo = 'anthonygv268@gmail.com';
 
 -- Opcional: Establecer roles para otros usuarios de prueba
 -- UPDATE usuarios SET rol = 'INVESTIGADOR' WHERE correo IN ('jmecolab@unitru.edu.pe', 'albedodark@gmail.com');

@@ -32,7 +32,7 @@ END $$;
 -- Actualizar datos existentes: el admin hardcodeado se convierte en ADMIN
 UPDATE usuarios 
 SET rol = 'ADMIN' 
-WHERE correo = 'juanaureliodelacruzgamarra@gmail.com';
+WHERE correo = 'anthonygv268@gmail.com';
 
 -- Los demás usuarios se quedan como USUARIO por defecto
 

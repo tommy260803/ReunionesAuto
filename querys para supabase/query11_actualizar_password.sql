@@ -5,12 +5,12 @@
 -- Primero verificar si el usuario existe
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE correo = 'juanaureliodelacruzgamarra@gmail.com') THEN
+    IF NOT EXISTS (SELECT 1 FROM usuarios WHERE correo = 'anthonygv268@gmail.com') THEN
         -- Si no existe, crearlo
         INSERT INTO usuarios (nombre, correo, password_hash, nivel_suscripcion, estado_suscripcion, rol)
         VALUES (
             'Juana Aurelio de la Cruz Gamarra',
-            'juanaureliodelacruzgamarra@gmail.com',
+            'anthonygv268@gmail.com',
             '$2b$12$1.GMkb3vVEIKcHqhhMZDmO87fHD08txYdx5KeS.nqR8DEa3YzfiJi',
             'enterprise',
             'activo',
@@ -22,7 +22,7 @@ BEGIN
         UPDATE usuarios 
         SET password_hash = '$2b$12$1.GMkb3vVEIKcHqhhMZDmO87fHD08txYdx5KeS.nqR8DEa3YzfiJi',
             rol = 'ADMIN'
-        WHERE correo = 'juanaureliodelacruzgamarra@gmail.com';
+        WHERE correo = 'anthonygv268@gmail.com';
         RAISE NOTICE 'Contraseña y rol de administrador actualizados';
     END IF;
 END $$;
@@ -30,6 +30,6 @@ END $$;
 -- Verificar el cambio
 SELECT id, nombre, correo, rol, estado_suscripcion 
 FROM usuarios 
-WHERE correo = 'juanaureliodelacruzgamarra@gmail.com';
+WHERE correo = 'anthonygv268@gmail.com';
 
 -- Nota: La contraseña es 'password123'

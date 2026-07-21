@@ -17,7 +17,7 @@
 ## Commands
 ```powershell
 # Backend
-backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000 --app-dir backend
+backend\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8080 --app-dir backend
 backend\.venv\Scripts\python.exe -m unittest discover -s backend\tests -t backend -v
 
 # Frontend

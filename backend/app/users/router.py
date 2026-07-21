@@ -47,7 +47,7 @@ async def list_users(
             nivel_suscripcion=row.get("nivel_suscripcion", "basico"),
             estado_suscripcion=row.get("estado_suscripcion", "activo"),
             fecha_creacion=row.get("fecha_creacion"),
-            is_admin=(row.get("correo", "").lower() == settings.ADMIN_EMAIL.lower())
+            is_admin=(row.get("rol", "USUARIO") == "ADMIN")
         ))
     return users
 

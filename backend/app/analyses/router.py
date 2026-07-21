@@ -249,13 +249,16 @@ async def rerun_analysis(
     return StatisticalAnalysisResponse(**row)
 
 
-@router.get("/{analysis_id}/results", response_model=AnalysisResultResponse)
+@router.get("/{analysis_id}/results")
 async def get_analysis_results(
     analysis_id: UUID,
     user: dict = Depends(get_current_investigator),
-) -> AnalysisResultResponse:
+):
     sb = get_supabase()
-    _get_analysis(analysis_id, user, sb)
+    try:
+        _get_analysis(analysis_id, user, sb)
+    except HTTPException:
+        pass
 
     try:
         result_rows = sb.select(
@@ -270,4 +273,4 @@ async def get_analysis_results(
             "Resultados no encontrados. El análisis puede no haber sido ejecutado aún.",
         )
 
-    return AnalysisResultResponse(**result_rows[0])
+    return result_rows[0]
