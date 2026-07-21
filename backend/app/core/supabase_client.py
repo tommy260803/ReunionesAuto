@@ -202,11 +202,11 @@ _anon_client: SupabaseClient | None = None
 _service_client: SupabaseClient | None = None
 
 
-def get_supabase(service_role: bool = False) -> SupabaseClient:
+def get_supabase(service_role: bool = True) -> SupabaseClient:
     """Devuelve la instancia singleton del cliente Supabase.
 
-    Usa service_role=True únicamente en endpoints de backend que requieren
-    acceso administrativo a Storage o a tablas privadas.
+    El backend maneja autenticación vía JWT propio y necesita service_role
+    para eludir RLS en todas las tablas (metricas_n8n, statistical_analyses, etc.).
     """
     global _anon_client, _service_client
     if service_role:

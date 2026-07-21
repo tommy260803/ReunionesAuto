@@ -21,6 +21,9 @@ import {
   CircleStop,
   RefreshCw,
   ListTodo,
+  Calendar,
+  Clock,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -29,6 +32,7 @@ interface Meeting {
   tema: string;
   fecha_inicio: string;
   tipo: string;
+  duracion_minutos?: number;
   id_externo?: string;
 }
 
@@ -327,7 +331,7 @@ export default function SummariesPage() {
     stopPolling();
     setGenerating(true);
     const startTime = Date.now();
-    const maxDuration = 300 * 1000; // 5 minutes
+    const maxDuration = 300 * 1000;
 
     pollingIntervalRef.current = setInterval(async () => {
       try {
@@ -388,10 +392,19 @@ export default function SummariesPage() {
   const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
   const displayedJob = summary && job ? { ...job, estado: "finalizado", error_detalle: undefined } : job;
   const meetingGroups = [
-    { type: "virtual", label: t("summaries.virtualMeetings"), color: "text-blue-600" },
-    { type: "presencial", label: t("summaries.inPersonMeetings"), color: "text-orange-600" },
-    { type: "mixta", label: t("summaries.mixedMeetings"), color: "text-violet-600" },
+    { type: "virtual", label: t("summaries.virtualMeetings"), color: "text-blue-600 dark:text-blue-400", icon: Video, count: meetings.filter((m) => (m.tipo || "").toLowerCase() === "virtual").length },
+    { type: "presencial", label: t("summaries.inPersonMeetings"), color: "text-orange-600 dark:text-orange-400", icon: FileText, count: meetings.filter((m) => (m.tipo || "").toLowerCase() === "presencial").length },
+    { type: "mixta", label: t("summaries.mixedMeetings"), color: "text-violet-600 dark:text-violet-400", icon: Sparkles, count: meetings.filter((m) => (m.tipo || "").toLowerCase() === "mixta").length },
   ];
+
+  const formatDate = (date?: string) => {
+    if (!date) return "";
+    try {
+      return format(parseISO(date), "dd MMM yyyy, HH:mm", { locale: language === "es" ? es : enUS });
+    } catch {
+      return "";
+    }
+  };
 
   if (loading) {
     return (
@@ -418,7 +431,7 @@ export default function SummariesPage() {
       </div>
 
       {(error || successMsg) && (
-        <div className={`p-4 rounded-xl border ${error ? "bg-red-50 text-red-600 border-red-100" : "bg-emerald-50 text-emerald-700 border-emerald-100"}`}>
+        <div className={`p-4 rounded-xl border ${error ? "bg-red-50 text-red-600 border-red-100 dark:bg-red-950/30 dark:border-red-900" : "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900"}`}>
           <div className="flex items-center gap-2">
             {generating && !error && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
             {error || successMsg}
@@ -428,13 +441,18 @@ export default function SummariesPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         {meetingGroups.map((group) => {
+          const GroupIcon = group.icon;
           const groupMeetings = meetings.filter((meeting) => (meeting.tipo || "").toLowerCase() === group.type);
           return (
             <section key={group.type} className="bg-card border border-border rounded-2xl p-4 shadow-sm min-h-44">
-              <h3 className={`font-semibold ${group.color} mb-3`}>{group.label}</h3>
+              <h3 className={`font-semibold ${group.color} mb-3 flex items-center gap-2`}>
+                <GroupIcon className="w-4 h-4" />
+                {group.label}
+                <span className="ml-auto text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full font-medium text-slate-600 dark:text-slate-400">{group.count}</span>
+              </h3>
               <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                 {groupMeetings.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-3">{t("summaries.noMeetings")}</p>
+                  <p className="text-sm app-muted py-3">{t("summaries.noMeetings")}</p>
                 ) : (
                   groupMeetings.map((meeting) => (
                     <button
@@ -447,10 +465,9 @@ export default function SummariesPage() {
                       }`}
                     >
                       <span className="block font-medium text-sm truncate">{meeting.tema || t("common.noTopic")}</span>
-                      <span className="text-xs text-slate-500">
-                        {meeting.fecha_inicio
-                          ? format(parseISO(meeting.fecha_inicio), "dd MMM yyyy", { locale: language === "es" ? es : enUS })
-                          : t("common.noDate")}
+                      <span className="text-xs app-muted flex items-center gap-1 mt-1">
+                        <Calendar className="w-3 h-3" />
+                        {meeting.fecha_inicio ? format(parseISO(meeting.fecha_inicio), "dd MMM yyyy", { locale: language === "es" ? es : enUS }) : t("common.noDate")}
                       </span>
                     </button>
                   ))
@@ -462,14 +479,33 @@ export default function SummariesPage() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden min-h-[400px] flex flex-col">
-        <div className="p-5 border-b border-border bg-slate-50/50 dark:bg-slate-900/50 flex justify-between items-center">
-          <h3 className="font-semibold flex items-center gap-2 text-foreground">
-            <FileText className="w-5 h-5 text-brand-500" />
-            {t("summaries.summaryTitle")}
-          </h3>
+        <div className="p-5 border-b border-border bg-slate-50/50 dark:bg-slate-900/50 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div>
+            <h3 className="font-semibold flex items-center gap-2 text-foreground">
+              <FileText className="w-5 h-5 text-brand-500" />
+              {t("summaries.summaryTitle")}
+            </h3>
+            {selectedMeeting && (
+              <div className="flex items-center gap-3 mt-1 text-xs app-muted">
+                <span>{selectedMeeting.tema || t("common.noTopic")}</span>
+                {selectedMeeting.fecha_inicio && (
+                  <span className="inline-flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {formatDate(selectedMeeting.fecha_inicio)}
+                  </span>
+                )}
+                {selectedMeeting.duracion_minutos && (
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {selectedMeeting.duracion_minutos} min
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
           {displayedJob && (
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500">{t("summaries.statusLabel")}:</span>
+              <span className="app-muted">{t("summaries.statusLabel")}:</span>
               <span
                 className={`font-medium flex items-center gap-1 ${
                   displayedJob.estado === "error"
@@ -484,13 +520,13 @@ export default function SummariesPage() {
                 {!["error", "finalizado"].includes(displayedJob.estado) && <Loader2 className="w-4 h-4 animate-spin" />}
                 {statusLabel(displayedJob.estado)}
               </span>
-              <span className="text-slate-400">|</span>
-              <span className="text-slate-500">{t("summaries.sourceLabel")}:</span>
-              <span className="font-medium text-slate-700">{sourceLabel(displayedJob.fuente)}</span>
+              <span className="app-muted">|</span>
+              <span className="app-muted">{t("summaries.sourceLabel")}:</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">{sourceLabel(displayedJob.fuente)}</span>
               {!TERMINAL_STATES.includes(displayedJob.estado) && (
                 <button
                   onClick={handleCancelJob}
-                  className="ml-2 inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                  className="ml-2 inline-flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/50"
                 >
                   <CircleStop className="h-3.5 w-3.5" />
                   {t("summaries.cancelProcess")}
@@ -507,12 +543,26 @@ export default function SummariesPage() {
               <Loader2 className="w-6 h-6 animate-spin text-brand-600" />
             </div>
           ) : summary ? (
-            <div className="flex-1 space-y-4">
+            <div className="flex-1 space-y-5">
               <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/50 rounded-xl p-5">
+                <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mb-2 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  Resumen
+                </h4>
                 <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">{summary.resumen}</p>
               </div>
+
               {summaryDetail && (
                 <div className="grid gap-4 md:grid-cols-2">
+                  {summaryDetail.resumen_ejecutivo && (
+                    <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-4 md:col-span-2">
+                      <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-brand-500" />
+                        {language === "es" ? "Resumen Ejecutivo" : "Executive Summary"}
+                      </h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{summaryDetail.resumen_ejecutivo}</p>
+                    </div>
+                  )}
                   {summaryDetail.decisiones && (
                     <div className="bg-white dark:bg-slate-900 border border-border rounded-xl p-4">
                       <h4 className="font-semibold text-foreground mb-2 flex items-center gap-2">
@@ -542,19 +592,22 @@ export default function SummariesPage() {
                   )}
                 </div>
               )}
-              <p className="text-xs text-slate-400 text-right">
-                {t("summaries.generatedAt")}: {summary.fecha_creacion ? format(parseISO(summary.fecha_creacion), "dd MMM, yyyy HH:mm", { locale: language === "es" ? es : enUS }) : "—"}
-              </p>
-              {selectedMeeting?.tipo !== "presencial" && (
-                <button
-                  onClick={() => audioInputRef.current?.click()}
-                  disabled={generating}
-                  className="self-start btn-primary inline-flex items-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
-                >
-                  <Headphones className="w-4 h-4" />
-                  {t("summaries.replaceRecording")}
-                </button>
-              )}
+
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs app-muted">
+                  {t("summaries.generatedAt")}: {summary.fecha_creacion ? format(parseISO(summary.fecha_creacion), "dd MMM, yyyy HH:mm", { locale: language === "es" ? es : enUS }) : "—"}
+                </p>
+                {selectedMeeting?.tipo !== "presencial" && (
+                  <button
+                    onClick={() => audioInputRef.current?.click()}
+                    disabled={generating}
+                    className="self-start btn-primary inline-flex items-center gap-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600"
+                  >
+                    <Headphones className="w-4 h-4" />
+                    {t("summaries.replaceRecording")}
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center space-y-5 py-8">
@@ -571,7 +624,7 @@ export default function SummariesPage() {
                     {generating ? <Loader2 className="w-8 h-8 animate-spin" /> : <UploadCloud className="w-8 h-8" />}
                   </div>
                   <h4 className="text-lg font-medium text-foreground mb-2">{generating ? t("summaries.processingMinutes") : t("summaries.uploadMinutes")}</h4>
-                  <p className="text-sm text-slate-500 mb-6 text-center">{generating ? t("summaries.processingText") : t("summaries.dropText")}</p>
+                  <p className="text-sm app-muted mb-6 text-center">{generating ? t("summaries.processingText") : t("summaries.dropText")}</p>
                   <input type="file" accept=".pdf" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
                   {!generating && (
                     <button onClick={() => fileInputRef.current?.click()} className="btn-primary bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-orange-500/20">
@@ -586,7 +639,7 @@ export default function SummariesPage() {
                   </div>
                   <div>
                     <h4 className="text-lg font-medium text-foreground mb-1">{t("summaries.noSummary")}</h4>
-                    <p className="text-sm text-slate-500 max-w-sm mx-auto">{t("summaries.noSummaryText")}</p>
+                    <p className="text-sm app-muted max-w-sm mx-auto">{t("summaries.noSummaryText")}</p>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md">
@@ -607,7 +660,7 @@ export default function SummariesPage() {
                       {generating && activeMode === "manual" ? t("summaries.statusSubiendo") : t("summaries.uploadRecording")}
                     </button>
                   </div>
-                  <div className="text-xs text-slate-400">{t("summaries.processingTranscript")}</div>
+                  <div className="text-xs app-muted">{t("summaries.processingTranscript")}</div>
                 </>
               )}
             </div>
